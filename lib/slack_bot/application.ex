@@ -7,14 +7,6 @@ defmodule SlackBot.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
-      # Starts a worker by calling: SlackBot.Worker.start_link(arg)
-      # {SlackBot.Worker, arg}
-    ]
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: SlackBot.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link([], strategy: :one_for_one, name: SlackBot.ApplicationSupervisor)
   end
 end

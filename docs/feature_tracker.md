@@ -5,15 +5,15 @@ Progress tracker mapping `docs/slackbot_design.md` into sequential, commit-sized
 ---
 
 ## Phase 1 – Runtime Config & Supervision Skeleton
-**Status:** Not Started  
+**Status:** Completed  
 Establish the foundational OTP structure so the application boots with validated configuration, even if downstream modules are stubs.
 
 ### Tasks
-- [ ] Define `%SlackBot.Config{}` struct with validation + env merging helpers.
-- [ ] Implement `SlackBot.ConfigServer` to serve immutable runtime config.
-- [ ] Scaffold `SlackBot.Supervisor` tree (ConfigServer plus placeholder children for downstream modules).
-- [ ] Add `SlackBot.Application` wiring (`start/2`) that boots the supervisor.
-- [ ] Provide initial doctests/unit tests for config validation edge cases.
+- [x] Define `%SlackBot.Config{}` struct with validation + env merging helpers.
+- [x] Implement `SlackBot.ConfigServer` to serve immutable runtime config.
+- [x] Scaffold `SlackBot.Supervisor` tree (ConfigServer plus placeholder children for downstream modules).
+- [x] Add `SlackBot.Application` wiring (`start/2`) that boots the supervisor.
+- [x] Provide initial doctests/unit tests for config validation edge cases.
 
 ### Testing
 - `mix test test/slack_bot/config_test.exs`

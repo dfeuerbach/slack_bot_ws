@@ -33,7 +33,7 @@ mix deps.get
 1. Configure your Slack tokens and runtime options (final API subject to change as phases progress):
 
 ```elixir
-config :slack_bot, SlackBot,
+config :slack_bot_ws, SlackBot,
   app_token: System.fetch_env!("SLACK_APP_TOKEN"),
   bot_token: System.fetch_env!("SLACK_BOT_TOKEN"),
   telemetry_prefix: [:slackbot],
@@ -63,8 +63,13 @@ end
 
 ```elixir
 children = [
-  {SlackBot, MyBot}
+  {SlackBot,
+   name: MyBot.SlackBot,
+   app_token: System.fetch_env!("SLACK_APP_TOKEN"),
+   bot_token: System.fetch_env!("SLACK_BOT_TOKEN"),
+   module: MyBot}
 ]
+
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
 

@@ -1,0 +1,216 @@
+defmodule SlackBot.Config do
+  @moduledoc """
+  Runtime configuration builder for `SlackBot`.
+
+  The module merges application environment defaults with runtime overrides,
+  validates required options, and returns a structured `%SlackBot.Config{}` that
+  other processes can consume without re-validating input.
+  """
+
+  @app :slack_bot_ws
+  @positive_defaults %{heartbeat_ms: 15_000, ping_timeout_ms: 5_000}
+
+  @enforce_keys [:app_token, :bot_token, :module]
+  defstruct [
+    :app_token,
+    :bot_token,
+    :module,
+    telemetry_prefix: [:slackbot],
+    cache: {:ets, []},
+    event_buffer: {:ets, []},
+    block_builder: :none,
+    backoff: %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity},
+    heartbeat_ms: 15_000,
+    ping_timeout_ms: 5_000,
+    ack_mode: :silent,
+    log_level: :info
+  ]
+
+  @type t :: %__MODULE__{
+          app_token: String.t(),
+          bot_token: String.t(),
+          module: module(),
+          telemetry_prefix: [atom()],
+          cache: {:ets | :adapter, any()},
+          event_buffer: {:ets | :adapter, any()},
+          block_builder: :none | {:blockbox, keyword()},
+          backoff: %{
+            min_ms: pos_integer(),
+            max_ms: pos_integer(),
+            max_attempts: pos_integer() | :infinity
+          },
+          heartbeat_ms: pos_integer(),
+          ping_timeout_ms: pos_integer(),
+          ack_mode: :silent | :ephemeral | {:custom, (map(), t() -> any())},
+          log_level: Logger.level()
+        }
+
+  @doc """
+  Builds a `%SlackBot.Config{}` by merging application environment defaults with the provided `opts`.
+
+  ## Examples
+
+      iex> defmodule MyBot do
+      ...>   def handle_event(_type, _event, _ctx), do: :ok
+      ...> end
+      iex> Application.put_env(:slack_bot_ws, SlackBot, app_token: "xapp-1", bot_token: "xoxb-1", module: MyBot)
+      iex> SlackBot.Config.build()
+      {:ok, %SlackBot.Config{app_token: "xapp-1", bot_token: "xoxb-1", module: MyBot}}
+
+      iex> SlackBot.Config.build(app_token: "xapp", bot_token: "", module: MyBot)
+      {:error, {:invalid_bot_token, ""}}
+  """
+  @spec build(keyword()) :: {:ok, t()} | {:error, term()}
+  def build(opts \\ []) when is_list(opts) do
+    opts
+    |> merge_with_env()
+    |> do_build()
+  end
+
+  @doc """
+  Same as `build/1`, but raises on validation errors.
+  """
+  @spec build!(keyword()) :: t()
+  def build!(opts \\ []) do
+    case build(opts) do
+      {:ok, config} ->
+        config
+
+      {:error, reason} ->
+        raise ArgumentError, "invalid slack bot configuration: #{inspect(reason)}"
+    end
+  end
+
+  defp merge_with_env(opts) do
+    env_opts =
+      Application.get_env(@app, SlackBot, [])
+      |> Keyword.merge(Application.get_env(@app, __MODULE__, []))
+
+    Keyword.merge(env_opts, opts)
+  end
+
+  defp do_build(opts) do
+    with {:ok, app_token} <- fetch_binary(opts, :app_token, :invalid_app_token),
+         {:ok, bot_token} <- fetch_binary(opts, :bot_token, :invalid_bot_token),
+         {:ok, module} <- fetch_module(opts),
+         {:ok, telemetry_prefix} <- fetch_prefix(opts),
+         {:ok, cache} <- fetch_tuple(opts, :cache),
+         {:ok, event_buffer} <- fetch_tuple(opts, :event_buffer),
+         {:ok, block_builder} <- fetch_block_builder(opts),
+         {:ok, backoff} <- fetch_backoff(opts),
+         {:ok, heartbeat_ms} <- fetch_positive(opts, :heartbeat_ms),
+         {:ok, ping_timeout_ms} <- fetch_positive(opts, :ping_timeout_ms),
+         {:ok, ack_mode} <- fetch_ack_mode(opts),
+         {:ok, log_level} <- fetch_log_level(opts) do
+      {:ok,
+       struct!(__MODULE__, %{
+         app_token: app_token,
+         bot_token: bot_token,
+         module: module,
+         telemetry_prefix: telemetry_prefix,
+         cache: cache,
+         event_buffer: event_buffer,
+         block_builder: block_builder,
+         backoff: backoff,
+         heartbeat_ms: heartbeat_ms,
+         ping_timeout_ms: ping_timeout_ms,
+         ack_mode: ack_mode,
+         log_level: log_level
+       })}
+    end
+  end
+
+  defp fetch_binary(opts, key, error_tag) do
+    case Keyword.fetch(opts, key) do
+      {:ok, value} when is_binary(value) and value != "" -> {:ok, value}
+      {:ok, value} -> {:error, {error_tag, value}}
+      :error -> {:error, {:missing_option, key}}
+    end
+  end
+
+  defp fetch_module(opts) do
+    case Keyword.fetch(opts, :module) do
+      {:ok, value} when is_atom(value) -> {:ok, value}
+      {:ok, value} -> {:error, {:invalid_module, value}}
+      :error -> {:error, {:missing_option, :module}}
+    end
+  end
+
+  defp fetch_prefix(opts) do
+    prefix = Keyword.get(opts, :telemetry_prefix, [:slackbot])
+
+    if Enum.all?(prefix, &is_atom/1) do
+      {:ok, prefix}
+    else
+      {:error, {:invalid_telemetry_prefix, prefix}}
+    end
+  end
+
+  defp fetch_tuple(opts, key) do
+    case Keyword.get(opts, key, {:ets, []}) do
+      {type, cfg} when type in [:ets, :adapter] -> {:ok, {type, cfg}}
+      other -> {:error, {:invalid_tuple_option, key, other}}
+    end
+  end
+
+  defp fetch_block_builder(opts) do
+    case Keyword.get(opts, :block_builder, :none) do
+      :none -> {:ok, :none}
+      {:blockbox, kw} when is_list(kw) -> {:ok, {:blockbox, kw}}
+      other -> {:error, {:invalid_block_builder, other}}
+    end
+  end
+
+  defp fetch_backoff(opts) do
+    backoff = Keyword.get(opts, :backoff, %{})
+    defaults = %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity}
+
+    merged = Map.merge(defaults, Map.new(backoff))
+
+    cond do
+      not positive?(merged.min_ms) ->
+        {:error, {:invalid_backoff_min, merged.min_ms}}
+
+      not positive?(merged.max_ms) ->
+        {:error, {:invalid_backoff_max, merged.max_ms}}
+
+      merged.max_attempts != :infinity and not positive?(merged.max_attempts) ->
+        {:error, {:invalid_backoff_attempts, merged.max_attempts}}
+
+      true ->
+        {:ok, merged}
+    end
+  end
+
+  defp fetch_positive(opts, key) do
+    value = Keyword.get(opts, key, Map.fetch!(@positive_defaults, key))
+
+    if positive?(value) do
+      {:ok, value}
+    else
+      {:error, {:invalid_positive_option, key, value}}
+    end
+  end
+
+  defp fetch_ack_mode(opts) do
+    case Keyword.get(opts, :ack_mode, :silent) do
+      :silent -> {:ok, :silent}
+      :ephemeral -> {:ok, :ephemeral}
+      {:custom, fun} when is_function(fun, 2) -> {:ok, {:custom, fun}}
+      other -> {:error, {:invalid_ack_mode, other}}
+    end
+  end
+
+  defp fetch_log_level(opts) do
+    level = Keyword.get(opts, :log_level, :info)
+
+    if level in [:debug, :info, :warning, :error] do
+      {:ok, level}
+    else
+      {:error, {:invalid_log_level, level}}
+    end
+  end
+
+  defp positive?(value) when is_integer(value) and value > 0, do: true
+  defp positive?(_), do: false
+end
