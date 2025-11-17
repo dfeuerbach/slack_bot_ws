@@ -11,7 +11,7 @@ Establish the foundational OTP structure so the application boots with validated
 ### Tasks
 - [ ] Define `%SlackBot.Config{}` struct with validation + env merging helpers.
 - [ ] Implement `SlackBot.ConfigServer` to serve immutable runtime config.
-- [ ] Scaffold `SlackBot.Supervisor` tree (ConfigServer, placeholder children).
+- [ ] Scaffold `SlackBot.Supervisor` tree (ConfigServer plus placeholder children for downstream modules).
 - [ ] Add `SlackBot.Application` wiring (`start/2`) that boots the supervisor.
 - [ ] Provide initial doctests/unit tests for config validation edge cases.
 
@@ -21,9 +21,9 @@ Establish the foundational OTP structure so the application boots with validated
 
 ---
 
-## Phase 2 – Connection & Ack Pipeline
+## Phase 2 – Connection, API Helpers & Ack Pipeline
 **Status:** Not Started  
-Deliver the WebSockex-based connection manager with retry/backoff, heartbeat monitoring, and lightning-fast ack discipline plus baseline telemetry/logging.
+Deliver the WebSockex-based connection manager with retry/backoff, heartbeat monitoring, fast acknowledgements, and the base public helpers (`SlackBot.push/2`, `SlackBot.emit/2`, test transport). Introduce stubbed cache/event-buffer modules so later phases can extend functionality without reordering work.
 
 ### Tasks
 - [ ] Implement `SlackBot.ConnectionManager` using WebSockex + `apps.connections.open`.
@@ -31,23 +31,27 @@ Deliver the WebSockex-based connection manager with retry/backoff, heartbeat mon
 - [ ] Add heartbeat (15s ping/pong) monitor + reconnect triggers.
 - [ ] Wire `SlackBot.TaskSupervisor` + PartitionSupervisor for handler fan-out.
 - [ ] Emit telemetry/log metadata for connect/disconnect/ack timings.
-- [ ] Unit + integration tests using a mocked WebSocket server (e.g., Mint/WebSockex test helper).
+- [ ] Introduce stubbed `SlackBot.EventBuffer` and `SlackBot.Cache` modules returning noop data until Phase 3 replaces them.
+- [ ] Expose `SlackBot.push/2` (Req/Finch powered) and `SlackBot.emit/2` helpers.
+- [ ] Provide `SlackBot.TestTransport` for connection/ack integration tests.
+- [ ] Unit + integration tests using a mocked WebSocket server (e.g., Mint/WebSockex test helper) plus API helper tests.
 
 ### Testing
 - `mix test test/slack_bot/connection_manager_test.exs`
-- Simulated socket-mode integration test harness asserting ack timing.
+- `mix test test/slack_bot/api_test.exs`
+- Simulated socket-mode integration test harness asserting ack timing (uses `SlackBot.TestTransport`).
 
 ---
 
 ## Phase 3 – Event Buffer & Cache Providers
 **Status:** Not Started  
-Introduce dedupe/replay guarantees and provider/mutation queue caching with ETS defaults and adapter behaviours.
+Replace the Phase 2 stubs with working dedupe/replay guarantees and provider/mutation queue caching with ETS defaults and adapter behaviours.
 
 ### Tasks
-- [ ] Define `SlackBot.EventBuffer` behaviour + ETS-backed adapter (single-node default).
+- [ ] Define `SlackBot.EventBuffer` behaviour + ETS-backed adapter (single-node default) and wire it into the existing connection pipeline.
 - [ ] Support pluggable adapters (Redis, etc.) via behaviour callbacks.
 - [ ] Implement Provider GenServer + Mutation Queue modules for channel/user caches.
-- [ ] Connect join/part events to cache mutations.
+- [ ] Connect join/part events to cache mutations and expose cache read APIs.
 - [ ] Add classification tests covering dedupe, replay, and mutation ordering.
 
 ### Testing
@@ -59,7 +63,7 @@ Introduce dedupe/replay guarantees and provider/mutation queue caching with ETS 
 
 ## Phase 4 – Command Router & Handler DSL
 **Status:** Not Started  
-Ship the NimbleParsec-powered command/message parsing plus declarative handler DSL and middleware hooks.
+Ship the NimbleParsec-powered command/message parsing plus declarative handler DSL and middleware hooks, building on the stable connection/cache layers from earlier phases.
 
 ### Tasks
 - [ ] Implement NimbleParsec combinators for slash commands + mention triggers.
