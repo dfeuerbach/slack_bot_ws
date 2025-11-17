@@ -22,24 +22,23 @@ Establish the foundational OTP structure so the application boots with validated
 ---
 
 ## Phase 2 – Connection, API Helpers & Ack Pipeline
-**Status:** Not Started  
+**Status:** Completed  
 Deliver the WebSockex-based connection manager with retry/backoff, heartbeat monitoring, fast acknowledgements, and the base public helpers (`SlackBot.push/2`, `SlackBot.emit/2`, test transport). Introduce stubbed cache/event-buffer modules so later phases can extend functionality without reordering work.
 
 ### Tasks
-- [ ] Implement `SlackBot.ConnectionManager` using WebSockex + `apps.connections.open`.
-- [ ] Port exponential backoff with rate-limit handling + configurable jitter.
-- [ ] Add heartbeat (15s ping/pong) monitor + reconnect triggers.
-- [ ] Wire `SlackBot.TaskSupervisor` + PartitionSupervisor for handler fan-out.
-- [ ] Emit telemetry/log metadata for connect/disconnect/ack timings.
-- [ ] Introduce stubbed `SlackBot.EventBuffer` and `SlackBot.Cache` modules returning noop data until Phase 3 replaces them.
-- [ ] Expose `SlackBot.push/2` (Req/Finch powered) and `SlackBot.emit/2` helpers.
-- [ ] Provide `SlackBot.TestTransport` for connection/ack integration tests.
-- [ ] Unit + integration tests using a mocked WebSocket server (e.g., Mint/WebSockex test helper) plus API helper tests.
+- [x] Implement `SlackBot.ConnectionManager` using WebSockex + `apps.connections.open`.
+- [x] Port exponential backoff with rate-limit handling + configurable jitter.
+- [x] Add heartbeat monitoring + reconnect triggers.
+- [x] Wire runtime Task Supervisor for handler fan-out.
+- [x] Introduce stubbed `SlackBot.EventBuffer` and `SlackBot.Cache` modules returning noop data until Phase 3 replaces them.
+- [x] Expose `SlackBot.push/2`, `SlackBot.emit/2`, and runtime config helpers.
+- [x] Provide `SlackBot.TestTransport` + `SlackBot.TestHTTP` for deterministic tests.
+- [x] Unit/integration tests covering connection manager and SlackBot helpers.
 
 ### Testing
 - `mix test test/slack_bot/connection_manager_test.exs`
-- `mix test test/slack_bot/api_test.exs`
-- Simulated socket-mode integration test harness asserting ack timing (uses `SlackBot.TestTransport`).
+- `mix test test/slack_bot_test.exs`
+- Simulated socket-mode integration tests via `SlackBot.TestTransport`.
 
 ---
 

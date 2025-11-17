@@ -22,7 +22,11 @@ defmodule SlackBot.Supervisor do
   @impl true
   def init(opts) do
     supervisor_name = Keyword.fetch!(opts, :supervisor_name)
-    config_opts = Keyword.get(opts, :config, [])
+
+    config_opts =
+      opts
+      |> Keyword.get(:config, [])
+      |> Keyword.put(:instance_name, supervisor_name)
 
     config_server_name =
       Keyword.get(opts, :config_server, Module.concat(supervisor_name, :ConfigServer))
@@ -30,9 +34,15 @@ defmodule SlackBot.Supervisor do
     runtime_supervisor_name =
       Keyword.get(opts, :runtime_supervisor, Module.concat(supervisor_name, :RuntimeSupervisor))
 
+    runtime_opts = [
+      name: runtime_supervisor_name,
+      base_name: supervisor_name,
+      config_server: config_server_name
+    ]
+
     children = [
       {ConfigServer, name: config_server_name, config: config_opts},
-      {SlackBot.RuntimeSupervisor, name: runtime_supervisor_name}
+      {SlackBot.RuntimeSupervisor, runtime_opts}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

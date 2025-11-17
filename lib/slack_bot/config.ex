@@ -10,11 +10,19 @@ defmodule SlackBot.Config do
   @app :slack_bot_ws
   @positive_defaults %{heartbeat_ms: 15_000, ping_timeout_ms: 5_000}
 
+  alias SlackBot.API
+  alias SlackBot.Socket
+
   @enforce_keys [:app_token, :bot_token, :module]
   defstruct [
     :app_token,
     :bot_token,
     :module,
+    instance_name: nil,
+    transport: Socket,
+    transport_opts: [],
+    http_client: API,
+    assigns: %{},
     telemetry_prefix: [:slackbot],
     cache: {:ets, []},
     event_buffer: {:ets, []},
@@ -30,6 +38,11 @@ defmodule SlackBot.Config do
           app_token: String.t(),
           bot_token: String.t(),
           module: module(),
+          instance_name: atom() | nil,
+          transport: module(),
+          transport_opts: keyword(),
+          http_client: module(),
+          assigns: map(),
           telemetry_prefix: [atom()],
           cache: {:ets | :adapter, any()},
           event_buffer: {:ets | :adapter, any()},
@@ -94,6 +107,10 @@ defmodule SlackBot.Config do
          {:ok, bot_token} <- fetch_binary(opts, :bot_token, :invalid_bot_token),
          {:ok, module} <- fetch_module(opts),
          {:ok, telemetry_prefix} <- fetch_prefix(opts),
+         {:ok, transport} <- fetch_module_option(opts, :transport, Socket),
+         {:ok, transport_opts} <- fetch_keyword(opts, :transport_opts, []),
+         {:ok, http_client} <- fetch_module_option(opts, :http_client, API),
+         {:ok, assigns} <- fetch_assigns(opts),
          {:ok, cache} <- fetch_tuple(opts, :cache),
          {:ok, event_buffer} <- fetch_tuple(opts, :event_buffer),
          {:ok, block_builder} <- fetch_block_builder(opts),
@@ -115,7 +132,12 @@ defmodule SlackBot.Config do
          heartbeat_ms: heartbeat_ms,
          ping_timeout_ms: ping_timeout_ms,
          ack_mode: ack_mode,
-         log_level: log_level
+         log_level: log_level,
+         transport: transport,
+         transport_opts: transport_opts,
+         http_client: http_client,
+         assigns: assigns,
+         instance_name: Keyword.get(opts, :instance_name)
        })}
     end
   end
@@ -133,6 +155,33 @@ defmodule SlackBot.Config do
       {:ok, value} when is_atom(value) -> {:ok, value}
       {:ok, value} -> {:error, {:invalid_module, value}}
       :error -> {:error, {:missing_option, :module}}
+    end
+  end
+
+  defp fetch_module_option(opts, key, default) do
+    module = Keyword.get(opts, key, default)
+
+    if is_atom(module) do
+      {:ok, module}
+    else
+      {:error, {:invalid_module_option, key, module}}
+    end
+  end
+
+  defp fetch_keyword(opts, key, default) do
+    value = Keyword.get(opts, key, default)
+
+    if Keyword.keyword?(value) do
+      {:ok, value}
+    else
+      {:error, {:invalid_keyword_option, key, value}}
+    end
+  end
+
+  defp fetch_assigns(opts) do
+    case Keyword.get(opts, :assigns, %{}) do
+      %{} = assigns -> {:ok, assigns}
+      other -> {:error, {:invalid_assigns, other}}
     end
   end
 
