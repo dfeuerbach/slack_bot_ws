@@ -49,14 +49,15 @@ config :slack_bot_ws, SlackBot,
 defmodule MyBot do
   use SlackBot
 
+  middleware SlackBot.Middleware.Logger
+
   handle_event "member_joined_channel", event, ctx do
     SlackBot.Cache.channels(ctx.bot) |> log_join(event["channel"])
   end
 
-  handle_slash "/deploy", cmd, ctx do
-    with {:ok, parsed} <- SlackBot.Command.parse(cmd, :deploy) do
-      Deployments.kick(parsed.app, parsed.env, ctx)
-    end
+  handle_slash "/deploy", payload, ctx do
+    parsed = payload["parsed"]
+    Deployments.kick(Enum.at(parsed.args, 0), parsed.flags[:env], ctx)
   end
 end
 ```

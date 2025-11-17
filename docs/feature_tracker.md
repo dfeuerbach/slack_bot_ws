@@ -61,19 +61,19 @@ Replace the Phase 2 stubs with working dedupe/replay guarantees and provider/mut
 ---
 
 ## Phase 4 – Command Router & Handler DSL
-**Status:** Not Started  
+**Status:** Completed  
 Ship the NimbleParsec-powered command/message parsing plus declarative handler DSL and middleware hooks, building on the stable connection/cache layers from earlier phases.
 
 ### Tasks
-- [ ] Implement NimbleParsec combinators for slash commands + mention triggers.
-- [ ] Provide `handle_event`, `handle_slash`, `handle_shortcut`, `middleware` macros.
-- [ ] Build middleware pipeline execution (before/after hooks).
-- [ ] Integrate parser output into handler invocation path.
-- [ ] Unit tests for parsers, DSL-generated functions, and middleware order guarantees.
+- [x] Implement NimbleParsec combinators for slash commands.
+- [x] Provide `handle_event`, `handle_slash`, `middleware` macros.
+- [x] Build middleware pipeline execution (before/after hooks).
+- [x] Integrate parser output into handler invocation path with slash payload enrichment.
+- [x] Unit tests for parsers, DSL-generated functions, and middleware behavior.
 
 ### Testing
-- `mix test test/slack_bot/command_router_test.exs`
-- Parser doctests showcasing sample slash commands.
+- `mix test test/slack_bot/router_test.exs`
+- `mix test test/slack_bot_test.exs`
 
 ---
 

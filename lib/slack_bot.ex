@@ -124,4 +124,10 @@ defmodule SlackBot do
       Module.concat(name, suffix)
     end
   end
+
+  defmacro __using__(opts \\ []) do
+    quote do
+      use SlackBot.Router, unquote(opts)
+    end
+  end
 end

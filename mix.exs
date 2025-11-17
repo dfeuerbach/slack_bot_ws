@@ -24,7 +24,8 @@ defmodule SlackBot.MixProject do
     [
       {:websockex, "~> 0.4"},
       {:req, "~> 0.4"},
-      {:jason, "~> 1.4"}
+      {:jason, "~> 1.4"},
+      {:nimble_parsec, "~> 1.4"}
     ]
   end
 end
