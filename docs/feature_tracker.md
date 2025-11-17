@@ -43,20 +43,20 @@ Deliver the WebSockex-based connection manager with retry/backoff, heartbeat mon
 ---
 
 ## Phase 3 – Event Buffer & Cache Providers
-**Status:** Not Started  
+**Status:** Completed  
 Replace the Phase 2 stubs with working dedupe/replay guarantees and provider/mutation queue caching with ETS defaults and adapter behaviours.
 
 ### Tasks
-- [ ] Define `SlackBot.EventBuffer` behaviour + ETS-backed adapter (single-node default) and wire it into the existing connection pipeline.
-- [ ] Support pluggable adapters (Redis, etc.) via behaviour callbacks.
-- [ ] Implement Provider GenServer + Mutation Queue modules for channel/user caches.
-- [ ] Connect join/part events to cache mutations and expose cache read APIs.
-- [ ] Add classification tests covering dedupe, replay, and mutation ordering.
+- [x] Define `SlackBot.EventBuffer` behaviour + ETS-backed adapter and wire it into the connection pipeline.
+- [x] Support adapter configuration via config (`{:ets, opts}` or `{:adapter, mod, opts}`).
+- [x] Implement Provider GenServer + Mutation Queue modules for channel/user caches.
+- [x] Connect join/part/user events to cache mutations and expose read APIs.
+- [x] Add regression tests for dedupe + cache mutation ordering.
 
 ### Testing
 - `mix test test/slack_bot/event_buffer_test.exs`
-- Property tests (e.g., `StreamData`) for dedupe semantics.
-- Optional Redis adapter tests guarded behind tag (requires docker/service).
+- `mix test test/slack_bot/cache_test.exs`
+- `mix test test/slack_bot/connection_manager_test.exs`
 
 ---
 

@@ -9,6 +9,7 @@ SlackBot is a socket-mode client for building resilient Slack automations in Eli
 - NimbleParsec parsing for deterministic slash-command and mention handling
 - Optional BlockBox integration for composing Block Kit payloads
 - Telemetry, structured logging, diagnostics buffers, and replay tooling
+- Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
 
 ## Installation
 
@@ -38,7 +39,8 @@ config :slack_bot_ws, SlackBot,
   bot_token: System.fetch_env!("SLACK_BOT_TOKEN"),
   telemetry_prefix: [:slackbot],
   cache: {:ets, []},
-  event_buffer: {:ets, []}
+  event_buffer: {:ets, []},
+  assigns: %{bot_user_id: System.get_env("SLACK_BOT_USER_ID")}
 ```
 
 2. Use the handler DSL to declare events and slash commands:
@@ -72,6 +74,8 @@ children = [
 
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
+
+Use `SlackBot.Cache.channels/1` and `SlackBot.Cache.users/1` to inspect cached metadata maintained by the runtime provider/mutation queue pair.
 
 ## Documentation
 - `docs/slackbot_design.md` – system design, goals, and architecture

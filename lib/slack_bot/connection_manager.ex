@@ -10,6 +10,7 @@ defmodule SlackBot.ConnectionManager do
   alias SlackBot.Config
   alias SlackBot.ConfigServer
   alias SlackBot.EventBuffer
+  alias SlackBot.Cache
 
   @type option ::
           {:name, GenServer.name()}
@@ -196,13 +197,21 @@ defmodule SlackBot.ConnectionManager do
   end
 
   defp dispatch_event(type, payload, envelope, state) do
-    EventBuffer.record(state.config, envelope_id(envelope), envelope)
+    key = envelope_id(envelope)
 
-    Task.Supervisor.start_child(state.task_supervisor, fn ->
-      invoke_handler(state.config, type, payload, envelope)
-    end)
+    if key && EventBuffer.seen?(state.config, key) do
+      Logger.debug("[SlackBot] duplicate envelope #{key}, skipping")
+      {:noreply, state}
+    else
+      EventBuffer.record(state.config, key, envelope)
+      maybe_update_cache(type, payload, state.config)
 
-    {:noreply, %{state | last_activity: now_ms()}}
+      Task.Supervisor.start_child(state.task_supervisor, fn ->
+        invoke_handler(state.config, type, payload, envelope)
+      end)
+
+      {:noreply, %{state | last_activity: now_ms()}}
+    end
   end
 
   defp invoke_handler(%Config{} = config, type, payload, envelope) do
@@ -223,6 +232,37 @@ defmodule SlackBot.ConnectionManager do
 
   defp envelope_id(%{"envelope_id" => id}), do: id
   defp envelope_id(_), do: nil
+
+  defp maybe_update_cache(
+         "member_joined_channel",
+         %{"channel" => channel, "user" => user},
+         config
+       ) do
+    if bot_user?(config, user), do: Cache.join_channel(config, channel)
+  end
+
+  defp maybe_update_cache("channel_left", %{"channel" => channel, "user" => user}, config) do
+    if bot_user?(config, user), do: Cache.leave_channel(config, channel)
+  end
+
+  defp maybe_update_cache("channel_joined", %{"channel" => %{"id" => channel}}, config) do
+    Cache.join_channel(config, channel)
+  end
+
+  defp maybe_update_cache("team_join", %{"user" => user}, config) when is_map(user) do
+    Cache.put_user(config, user)
+  end
+
+  defp maybe_update_cache("user_change", %{"user" => user}, config) when is_map(user) do
+    Cache.put_user(config, user)
+  end
+
+  defp maybe_update_cache(_type, _payload, _config), do: :ok
+
+  defp bot_user?(%{assigns: %{bot_user_id: bot_user_id}}, user_id) when is_binary(bot_user_id),
+    do: bot_user_id == user_id
+
+  defp bot_user?(_, _), do: false
 
   defp backoff_delay(state) do
     attempt = max(state.attempt, 1)
