@@ -60,6 +60,24 @@ defmodule SlackBot.ConfigTest do
       assert {:ok, %Config{ack_mode: {:custom, ^fun}}} =
                Config.build(Keyword.put(@valid_opts, :ack_mode, {:custom, fun}))
     end
+
+    test "accepts custom ack client module" do
+      assert {:ok, %Config{ack_client: TestAckClient}} =
+               Config.build(Keyword.put(@valid_opts, :ack_client, TestAckClient))
+
+      assert {:error, {:invalid_module_option, :ack_client, 123}} =
+               Config.build(Keyword.put(@valid_opts, :ack_client, 123))
+    end
+
+    test "validates diagnostics options" do
+      assert {:ok, %Config{diagnostics: %{enabled: true, buffer_size: 50}}} =
+               Config.build(
+                 Keyword.put(@valid_opts, :diagnostics, enabled: true, buffer_size: 50)
+               )
+
+      assert {:error, {:invalid_diagnostics_buffer, 0}} =
+               Config.build(Keyword.put(@valid_opts, :diagnostics, buffer_size: 0))
+    end
   end
 
   describe "build!/1" do
@@ -73,4 +91,11 @@ defmodule SlackBot.ConfigTest do
       end
     end
   end
+end
+
+defmodule TestAckClient do
+  @behaviour SlackBot.SlashAck.HttpClient
+
+  @impl true
+  def post(_url, _body), do: :ok
 end

@@ -5,3 +5,5 @@ config :slack_bot_ws, SlackBot,
   bot_token: "xoxb-test-token",
   module: SlackBot.TestHandler,
   telemetry_prefix: [:slackbot, :test]
+
+config :logger, level: :warning

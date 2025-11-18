@@ -28,6 +28,7 @@ defmodule SlackBot.RuntimeSupervisor do
       []
       |> Kernel.++(SlackBot.Cache.child_specs(config))
       |> Kernel.++([SlackBot.EventBuffer.child_spec(config)])
+      |> Kernel.++([SlackBot.Diagnostics.child_spec(config)])
       |> Kernel.++([
         %{
           id: task_supervisor_name,

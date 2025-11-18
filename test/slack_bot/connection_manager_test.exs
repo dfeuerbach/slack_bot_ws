@@ -1,6 +1,8 @@
 defmodule SlackBot.ConnectionManagerTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias SlackBot.Cache
   alias SlackBot.EventBuffer
 
@@ -30,15 +32,22 @@ defmodule SlackBot.ConnectionManagerTest do
 
     {:ok, _} = start_supervised({Task.Supervisor, name: :cm_tasks})
 
-    {:ok, _pid} =
-      start_supervised(
-        {SlackBot.ConnectionManager,
-         name: :cm_manager, config_server: :cm_config, task_supervisor: :cm_tasks}
-      )
+    parent = self()
 
-    assert_receive {:test_transport, transport_pid}
+    capture_log(fn ->
+      {:ok, _pid} =
+        start_supervised(
+          {SlackBot.ConnectionManager,
+           name: :cm_manager, config_server: :cm_config, task_supervisor: :cm_tasks}
+        )
 
-    %{transport: transport_pid, config: config}
+      assert_receive {:test_transport, transport_pid}
+      send(parent, {:cm_context, %{transport: transport_pid, config: config}})
+    end)
+
+    receive do
+      {:cm_context, ctx} -> ctx
+    end
   end
 
   test "dispatches events through handler", %{transport: transport_pid} do

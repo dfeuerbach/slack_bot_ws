@@ -27,11 +27,12 @@ end
 - `SlackBot.start_link/1`: accepts keyword list or `%SlackBot.Config{}` with:
   - tokens/ids (`app_token`, `bot_token`, `team_id`, `user_id`, `bot_id`)
   - connection opts: `backoff: {min_ms, max_ms, max_attempts}`, `heartbeat_ms`, `ping_timeout_ms`, `log_level`, `telemetry_prefix`
-  - handler DSL macros: `handle_event/3`, `handle_slash/3`, `handle_shortcut/3`, `middleware/1`
-  - slash command ack strategy: `:silent` (default), `:ephemeral`, `{:custom, fun}`
+  - handler DSL macros: `handle_event/3`, `slash/2`, `middleware/1`
+  - slash command ack strategy: `:silent` (default), `:ephemeral`, `{:custom, fun}` with per-command override
   - cache adapter spec: `cache: {:ets, opts} | {:adapter, module, opts}`
   - event buffer adapter spec: `event_buffer: {:ets, opts} | {:adapter, module, opts}`
-  - optional BlockBox toggle: `blocks: :none | {:blockbox, opts}`
+  - diagnostics toggle: `diagnostics: [enabled: boolean(), buffer_size: pos_integer()]`
+  - optional BlockBox toggle: `block_builder: :none | {:blockbox, opts}`
 - Runtime helpers:
   - `SlackBot.push(bot, request)` – convenience wrappers around Slack Web API (backed by Req/Finch).
   - `SlackBot.emit(bot, event)` – inject synthetic events (testing/scheduled jobs).
@@ -86,20 +87,19 @@ SlackBot.Supervisor
     end
   end
   ```
-- Legacy `handle_slash/3` handlers still work and now receive `payload["parsed"].args` from the tokenizer so existing bots avoid bespoke regex trees for mentions or structured snippets.
 
-### Middleware & Diagnostics
-- Middleware pipeline (plug-like): `before_event/3`, `after_event/4`.
-- Diagnostics module offers per-connection ring buffer for incoming/outgoing frames, toggled via config for debugging.
-- Logger metadata: `envelope_id`, `event_type`, `channel`, `user`, `request_id`.
+### Middleware, Logging & Diagnostics
+- Middleware pipeline (plug-like) wraps every dispatch; shared modules (logging, metrics, auth) can short-circuit or mutate payloads.
+- `SlackBot.Logging` attaches consistent metadata (`envelope_id`, `event_type`, `channel`, `user`) around handler execution.
+- `SlackBot.Telemetry` centralizes event naming so connection lifecycle, handler timings, diagnostics actions, etc. emit consistent metrics (ready for LiveDashboard or custom collectors).
+- `SlackBot.Diagnostics` provides per-instance ring buffer backed by ETS, capturing inbound/outbound frames with list/clear/replay APIs.
 
 ## Developer Experience Enhancements
 - **BlockBox integration (optional)**:
-  - `use SlackBot.Blocks block_builder: :blockbox` injects helper functions; auto-detects dependency.
-  - Graceful fallback to plain map builders when disabled.
-  - Encourage best UX without forcing dependency.
-- **Slash command auto-ack**: optional ephemeral “Processing…” message (default off). Configurable handler receives `response_url` for follow-ups.
-- **Replay/simulation**: capture frames to disk/ETS, replay into handler pipeline for deterministic tests.
+  - Configure `%SlackBot.Config{block_builder: {:blockbox, opts}}` and call `SlackBot.Blocks.build/2` to run BlockBox’s DSL when the dependency is present.
+  - Graceful fallback to map helpers (`SlackBot.Blocks.section/2`, `button/2`, etc.) when BlockBox isn’t installed.
+- **Slash command auto-ack**: global/per-command `:silent | :ephemeral | {:custom, fun}` strategies. The `:ephemeral` option automatically posts “Processing…” via the slash `response_url`.
+- **Replay/simulation**: diagnostics ring buffer + `SlackBot.Diagnostics.replay/2` feed captured events back through the router for deterministic debugging.
 - **Testing helpers**: `SlackBot.TestTransport` to assert ack timing, handler execution, and telemetry emission without live Slack connection.
 - **Telemetry docs**: sample `Telemetry.Metrics` definitions; instructions for wiring LiveDashboard (optional, Phoenix-only).
 

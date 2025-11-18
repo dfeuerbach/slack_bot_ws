@@ -9,7 +9,7 @@ defmodule SlackBot.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       docs: [
-        extras: ["README.md", "docs/slash_grammar.md"]
+        extras: ["README.md", "docs/slash_grammar.md", "docs/diagnostics.md"]
       ]
     ]
   end

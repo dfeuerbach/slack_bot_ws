@@ -79,17 +79,17 @@ Ship the NimbleParsec-powered command/message parsing plus declarative handler D
 ---
 
 ## Phase 5 – Diagnostics, Telemetry & DX Enhancements
-**Status:** Not Started  
+**Status:** Completed  
 Layer on optional BlockBox integration, slash-command auto-ack helpers, diagnostics/replay tooling, and documentation for telemetry consumers.
 
 ### Tasks
-- [ ] Implement diagnostics ring buffer + replay tooling.
-- [ ] Add structured logging metadata injection utilities.
-- [ ] Integrate optional BlockBox helpers (compile-time detection, graceful fallback).
-- [ ] Provide slash-command auto-ack strategies (`:silent`, `:ephemeral`, `{:custom, fun}`).
-- [ ] Document Telemetry events + sample metrics definitions.
-- [ ] Tests covering diagnostics toggles, BlockBox opt-in/out, auto-ack flows.
-- [ ] Document every new public module/function with HexDocs-ready `@moduledoc`/`@doc`.
+- [x] Implement `SlackBot.Diagnostics` ring buffer + ETS-backed server, list/clear APIs, and replay helper that drives events back through `SlackBot.emit/2`.
+- [x] Wire diagnostics capture into `SlackBot.ConnectionManager`, `SlackBot.Socket`, and `SlackBot.emit/2` (configurable via `%SlackBot.Config{diagnostics: ...}`).
+- [x] Add structured logging helpers + Telemetry instrumentation (connection lifecycle, handler execution, diagnostics actions).
+- [x] Integrate optional BlockBox helpers with graceful fallback + documentation.
+- [x] Provide slash-command auto-ack strategies (global + per-command) with `:silent`, `:ephemeral`, and `{:custom, fun}` implementations.
+- [x] Documentation: diagnostics/replay guide, Telemetry/LiveDashboard notes, README highlights.
+- [x] Tests covering diagnostics buffer semantics, replay, auto-ack behaviors, and BlockBox opt-in/out (skipping BlockBox assertions when dependency absent).
 
 ### Testing
 - `mix test test/slack_bot/diagnostics_test.exs`

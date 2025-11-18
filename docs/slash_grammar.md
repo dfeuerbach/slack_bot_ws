@@ -1,47 +1,47 @@
 # Slash Command Grammar DSL
 
-SlackBot ships with a grammar-oriented DSL that compiles to NimbleParsec parsers. Each
-`slash/2` block lets you declare literals, values, optionals, choices, and repeats so that
-handlers receive structured maps instead of ad-hoc token lists.
+The `slash/2` DSL is built to make slash commands deterministic, easy to maintain, and
+fast. Instead of manually splitting strings or juggling regexes, you describe the format
+you expect and let SlackBot generate a NimbleParsec parser at compile time. This guide
+teaches the DSL in layers so you can follow along as the commands grow in complexity.
 
-## Quick Reference
+---
 
-| Macro | Purpose | Example |
-| --- | --- | --- |
-| `literal value, opts \\ []` | Match a literal token, optionally tagging it | `literal "list", as: :mode, value: :list` |
-| `value name, opts \\ []` | Capture a token and assign it to `name` | `value :service` |
-| `optional do ... end` | Optional group; skipping it leaves previous values untouched | `optional literal("short", as: :short?)` |
-| `repeat do ... end` | Repeat group until it no longer matches | `repeat do literal "team"; value :teams end` |
-| `choice do ... end` | First matching branch wins | `choice do sequence ... end` |
-| `sequence do ... end` | Explicit grouping (useful inside `choice`) | `sequence do literal "project"; literal "report" end` |
-| `handle payload, ctx do ... end` | Handler that receives the enriched payload | `handle payload, ctx do ... end` |
+## Why use the DSL?
 
-## Examples
+- **Deterministic parsing** – handlers receive structured maps, not ad-hoc token lists.
+- **Readable expectations** – the command format lives next to the handler, making code
+  reviews and maintenance straightforward.
+- **Compile-time validation** – malformed definitions fail fast, before your bot ships.
+- **Battle-tested parsing** – NimbleParsec handles quoting, whitespace, and edge cases.
 
-### Literal-Only Command
+---
+
+## 1. Literal-only commands
+
+Great for “one-shot” commands that trigger behavior without arguments.
 
 ```elixir
 slash "/cmd" do
   grammar do
-    literal "project", as: :mode, value: :project_report
+    literal "project"
     literal "report"
   end
 
   handle payload, ctx do
-    # payload["parsed"] => %{command: "cmd", mode: :project_report}
+    # payload["parsed"] => %{command: "cmd"}
+    Reports.generate(ctx)
   end
 end
 ```
 
-Slack input: `/cmd project report`
+**Slack input:** `/cmd project report`
 
-Handler payload:
+---
 
-```elixir
-%{command: "cmd", mode: :project_report}
-```
+## 2. Capturing values
 
-### Literal with Named Value
+Use `value/1` to bind user-provided tokens to names that show up in the parsed payload.
 
 ```elixir
 slash "/cmd" do
@@ -52,14 +52,21 @@ slash "/cmd" do
   end
 
   handle payload, ctx do
-    # payload["parsed"] => %{command: "cmd", mode: :team_show, team_name: "marketing"}
+    %{team_name: name} = payload["parsed"]
+    Teams.show(name, ctx)
   end
 end
 ```
 
-Slack input: `/cmd team marketing show`
+**Slack input:** `/cmd team marketing show`  
+**Parsed payload:** `%{command: "cmd", mode: :team_show, team_name: "marketing"}`
 
-### Optional Literal + Value
+---
+
+## 3. Optional segments
+
+Wrap anything that isn’t required in `optional`. Omitted segments simply don’t appear in
+the parsed map.
 
 ```elixir
 slash "/cmd" do
@@ -69,15 +76,20 @@ slash "/cmd" do
     value :app
   end
 
-  handle payload, ctx do
-    # payload["parsed"] => %{command: "cmd", mode: :list, short?: true, app: "foo"}
+  handle payload, _ctx do
+    payload["parsed"]
   end
 end
 ```
 
-Slack input: `/cmd list short foo`
+**Slack input:** `/cmd list short foo`  
+**Parsed payload:** `%{command: "cmd", mode: :list, short?: true, app: "foo"}`
 
-### Repeating Segments
+---
+
+## 4. Repeating segments
+
+`repeat` lets you express “zero or more” patterns. Each `value` inside becomes a list.
 
 ```elixir
 slash "/cmd" do
@@ -90,15 +102,20 @@ slash "/cmd" do
     end
   end
 
-  handle payload, ctx do
-    # payload["parsed"] => %{command: "cmd", mode: :report_teams, teams: ["one","two","three"]}
+  handle payload, _ctx do
+    payload["parsed"]
   end
 end
 ```
 
-Slack input: `/cmd report team one team two team three`
+**Slack input:** `/cmd report team alpha team beta team gamma`  
+**Parsed payload:** `%{teams: ["alpha", "beta", "gamma"], mode: :report_teams}`
 
-### Full Choice Grammar
+---
+
+## 5. Branching with `choice`
+
+Many commands act like subcommands. `choice` lets you express each branch declaratively.
 
 ```elixir
 slash "/cmd" do
@@ -118,14 +135,35 @@ slash "/cmd" do
   end
 
   handle payload, ctx do
-    # handle whichever branch matched
+    parsed = payload["parsed"]
+    handle_mode(parsed.mode, parsed, ctx)
   end
 end
 ```
 
-## Handler Payload
+**Slack inputs covered:** `/cmd list app`, `/cmd list short app`, `/cmd project report`
 
-Every DSL handler receives `payload["parsed"]`, which contains:
+---
+
+## 6. End-to-end example
+
+The tests (`test/slack_bot/router_test.exs`) contain a full “GrammarRouter” that combines
+all the primitives. Here’s how a few Slack inputs map to payloads:
+
+| Slack input | Parsed payload |
+| --- | --- |
+| `/cmd list short app param one param two` | `%{mode: :list, short?: true, app: "app", params: ["one","two"]}` |
+| `/cmd project report` | `%{mode: :project_report}` |
+| `/cmd team marketing show` | `%{mode: :team_show, team_name: "marketing"}` |
+| `/cmd report team one team two team three` | `%{mode: :report_teams, teams: ["one","two","three"]}` |
+
+Each branch is explicit, and the handler simply reacts to structured data.
+
+---
+
+## Handler payload structure
+
+Every DSL handler receives an enriched payload under `payload["parsed"]`:
 
 ```elixir
 %{
@@ -135,19 +173,34 @@ Every DSL handler receives `payload["parsed"]`, which contains:
   app: "foo",
   params: ["one", "two"],
   teams: ["alpha", "beta"],
-  extra_args: ["leftover", "tokens"] # only if tokens remain unmatched
+  extra_args: ["leftover"] # present only if tokens remain unmatched
 }
 ```
 
-- Repeated `value` definitions become lists (e.g., `params`, `teams`).
-- Optional literals store their `value:` option (default `true`) when matched.
-- Any tokens left after the grammar completes land in `:extra_args` for custom handling.
+- Repeated values become lists.
+- Optional literals store the `value:` option (default `true`) when matched.
+- Any leftover tokens land in `:extra_args`, allowing custom fallbacks.
 
-## Tips
+---
 
-- Use `choice` to model top-level subcommands (e.g., `/cmd list`, `/cmd report`, `/cmd team ...`).
-- Combine `literal "param"` with `value :params` inside `repeat` to support open-ended argument lists.
-- If you need to expose the raw tokens as a fallback, you can also call `SlackBot.Command.lex/1`.
+## Quick reference
 
-For a deeper dive, see `README.md` and the tests in `test/slack_bot/router_test.exs`.
+| Macro | Purpose | Example |
+| --- | --- | --- |
+| `literal value, opts \\ []` | Match a literal token, optionally tagging metadata | `literal "list", as: :mode, value: :list` |
+| `value name, opts \\ []` | Capture a token and assign it to `name` | `value :service` |
+| `optional do ... end` | Optional group; skipped segments leave previous values untouched | `optional literal("short", as: :short?)` |
+| `repeat do ... end` | Repeat group until it no longer matches | `repeat do literal "team"; value :teams end` |
+| `choice do ... end` | First matching branch wins | `choice do sequence ... end` |
+| `sequence do ... end` | Explicit grouping (helpful inside `choice`) | `sequence do literal "project"; literal "report" end` |
+| `handle payload, ctx do ... end` | Handler that receives the enriched payload | `handle payload, ctx do ... end` |
 
+---
+
+## Tips and next steps
+
+- Use `SlackBot.Diagnostics.list/2` + `replay/2` to capture real commands and verify they
+  parse as expected.
+- Prefer small, focused `choice` branches over one giant handler with nested `case`.
+- Need raw tokens? Call `SlackBot.Command.lex/1` yourself.
+- See `README.md` and `test/slack_bot/router_test.exs` for more real-world examples.

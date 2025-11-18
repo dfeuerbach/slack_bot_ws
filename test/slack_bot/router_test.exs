@@ -1,6 +1,8 @@
 defmodule SlackBot.RouterTest do
   use ExUnit.Case, async: true
 
+  alias SlackBot.Config
+
   defmodule TestMiddleware do
     def call("message", payload, ctx), do: {:cont, Map.put(payload, "tag", :processed), ctx}
     def call(_type, payload, ctx), do: {:cont, payload, ctx}
@@ -31,15 +33,29 @@ defmodule SlackBot.RouterTest do
     end
   end
 
+  defmodule AckRouter do
+    use SlackBot
+
+    slash "/deploy", ack: :silent do
+      grammar do
+        value(:service)
+      end
+
+      handle payload, ctx do
+        send(ctx.assigns.test_pid, {:slash_ack_override, payload["parsed"]})
+      end
+    end
+  end
+
   test "dispatches message events" do
-    ctx = %{assigns: %{test_pid: self()}}
+    ctx = ctx(DemoRouter)
     DemoRouter.handle_event("message", %{"text" => "hi"}, ctx)
 
     assert_receive {:message, %{"text" => "hi", "tag" => :processed}}
   end
 
   test "parses slash commands" do
-    ctx = %{assigns: %{test_pid: self()}}
+    ctx = ctx(DemoRouter)
 
     DemoRouter.handle_event(
       "slash_commands",
@@ -115,7 +131,7 @@ defmodule SlackBot.RouterTest do
   end
 
   test "dsl grammar handles literal project report" do
-    ctx = %{assigns: %{test_pid: self()}}
+    ctx = ctx(GrammarRouter)
 
     GrammarRouter.handle_event(
       "slash_commands",
@@ -127,7 +143,7 @@ defmodule SlackBot.RouterTest do
   end
 
   test "dsl grammar handles team show with value" do
-    ctx = %{assigns: %{test_pid: self()}}
+    ctx = ctx(GrammarRouter)
 
     GrammarRouter.handle_event(
       "slash_commands",
@@ -139,7 +155,7 @@ defmodule SlackBot.RouterTest do
   end
 
   test "dsl grammar handles repeated team values" do
-    ctx = %{assigns: %{test_pid: self()}}
+    ctx = ctx(GrammarRouter)
 
     GrammarRouter.handle_event(
       "slash_commands",
@@ -148,5 +164,63 @@ defmodule SlackBot.RouterTest do
     )
 
     assert_receive {:dsl, %{command: "cmd", mode: :report_teams, teams: ["one", "two", "three"]}}
+  end
+
+  test "slash command inherits config-level ack mode" do
+    parent = self()
+
+    ack_fun = fn payload, _config ->
+      send(parent, {:ack_invoked, payload["text"]})
+      :ok
+    end
+
+    ctx = ctx(DemoRouter, ack_mode: {:custom, ack_fun})
+
+    DemoRouter.handle_event(
+      "slash_commands",
+      %{"command" => "/deploy", "text" => "app env prod"},
+      ctx
+    )
+
+    assert_receive {:ack_invoked, "app env prod"}
+  end
+
+  test "slash command options override ack mode" do
+    parent = self()
+
+    ack_fun = fn payload, _config ->
+      send(parent, {:ack_invoked, payload["text"]})
+      :ok
+    end
+
+    ctx = ctx(AckRouter, ack_mode: {:custom, ack_fun})
+
+    AckRouter.handle_event(
+      "slash_commands",
+      %{"command" => "/deploy", "text" => "svc"},
+      ctx
+    )
+
+    assert_receive {:slash_ack_override, %{command: "deploy", service: "svc"}}
+    refute_receive {:ack_invoked, _}
+  end
+
+  defp ctx(module, overrides \\ []) do
+    assigns = %{test_pid: self()}
+    config = build_config(module, Keyword.put(overrides, :assigns, assigns))
+    %{assigns: assigns, config: config}
+  end
+
+  defp build_config(module, overrides) do
+    base =
+      Map.from_struct(%Config{
+        app_token: "xapp",
+        bot_token: "xoxb",
+        module: module,
+        assigns: overrides[:assigns],
+        instance_name: RouterTest.Instance
+      })
+
+    struct!(Config, Map.merge(base, Map.new(overrides)))
   end
 end

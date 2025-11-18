@@ -5,6 +5,8 @@ defmodule SlackBot.Socket do
 
   require Logger
 
+  alias SlackBot.Diagnostics
+
   def start_link(url, opts) do
     manager = Keyword.fetch!(opts, :manager)
     config = Keyword.fetch!(opts, :config)
@@ -61,7 +63,7 @@ defmodule SlackBot.Socket do
   end
 
   defp handle_decoded(%{"payload" => payload} = envelope, state) do
-    ack(envelope)
+    ack(envelope, state.config)
 
     case payload do
       %{"event" => event = %{"type" => type}} ->
@@ -78,7 +80,7 @@ defmodule SlackBot.Socket do
   end
 
   defp handle_decoded(%{"type" => "events_api", "envelope_id" => _} = envelope, state) do
-    ack(envelope)
+    ack(envelope, state.config)
     send(state.manager, {:slackbot, :events_api, envelope})
     {:ok, state}
   end
@@ -98,12 +100,19 @@ defmodule SlackBot.Socket do
     {:ok, state}
   end
 
-  defp ack(%{"envelope_id" => id}) when is_binary(id) do
+  defp ack(%{"envelope_id" => id} = envelope, config) when is_binary(id) do
     ack = Jason.encode!(%{envelope_id: id})
+
+    Diagnostics.record(config, :outbound, %{
+      type: "ack",
+      payload: %{"envelope_id" => id},
+      meta: %{envelope: envelope}
+    })
+
     WebSockex.cast(self(), {:send, {:text, ack}})
   end
 
-  defp ack(_), do: :ok
+  defp ack(_, _), do: :ok
 
   defp log_decode_error(reason, payload, state) do
     Logger.warning(

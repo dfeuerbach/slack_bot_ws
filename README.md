@@ -8,7 +8,7 @@ SlackBot is a socket-mode client for building resilient Slack automations in Eli
 - Declarative handler DSL for events, slash commands, shortcuts, and middleware
 - Slash-command grammar DSL compiled via NimbleParsec for deterministic parsing
 - Optional BlockBox integration for composing Block Kit payloads
-- Telemetry, structured logging, diagnostics buffers, and replay tooling
+- Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
 
 ## Installation
@@ -40,6 +40,8 @@ config :slack_bot_ws, SlackBot,
   telemetry_prefix: [:slackbot],
   cache: {:ets, []},
   event_buffer: {:ets, []},
+  diagnostics: [enabled: true, buffer_size: 300],
+  ack_mode: :ephemeral,
   assigns: %{bot_user_id: System.get_env("SLACK_BOT_USER_ID")}
 ```
 
@@ -55,7 +57,8 @@ defmodule MyBot do
     SlackBot.Cache.channels(ctx.bot) |> log_join(event["channel"])
   end
 
-  slash "/deploy" do
+  # auto-sends an ephemeral "Processing..." ack before heavy work
+  slash "/deploy", ack: :ephemeral do
     grammar do
       value :service
       optional literal("short", as: :short?)
@@ -92,6 +95,29 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 Use `SlackBot.Cache.channels/1` and `SlackBot.Cache.users/1` to inspect cached metadata maintained by the runtime provider/mutation queue pair.
 
+## Diagnostics & Replay
+
+Enable diagnostics in your config to keep a rolling buffer of inbound/outbound frames:
+
+```elixir
+config :slack_bot_ws, SlackBot, diagnostics: [enabled: true, buffer_size: 300]
+```
+
+From `iex -S mix`, you can inspect or replay traffic without waiting for Slack to resend:
+
+```elixir
+iex> SlackBot.Diagnostics.list(MyBot.SlackBot, limit: 5)
+[%{direction: :inbound, type: "slash_commands", ...}, ...]
+
+iex> SlackBot.Diagnostics.replay(MyBot.SlackBot, types: ["slash_commands"])
+{:ok, 3}
+```
+
+Replay feeds events back through `SlackBot.emit/2`, so handlers, middleware, caches, and
+telemetry fire exactly as they did originally. For tests, pass `dispatch: fn entry -> ... end`
+to intercept the replay without touching the live connection. See
+[`docs/diagnostics.md`](docs/diagnostics.md) for advanced workflows.
+
 ## Slash Command Grammar
 
 The `slash/2` DSL converts structured declarations into NimbleParsec parsers. A few real-world examples:
@@ -108,6 +134,7 @@ See [`docs/slash_grammar.md`](docs/slash_grammar.md) for the full macro referenc
 - `docs/slackbot_design.md` – system design, goals, and architecture
 - `docs/feature_tracker.md` – phased implementation plan
 - `docs/slash_grammar.md` – comprehensive slash-command DSL guide
+- `docs/diagnostics.md` – diagnostics buffer + replay guide
 
 Additional guides (BlockBox helpers, LiveDashboard wiring, examples) will land during later phases.
 

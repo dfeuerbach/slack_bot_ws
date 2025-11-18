@@ -5,10 +5,13 @@ defmodule SlackBot.ConnectionManager do
 
   require Logger
 
+  alias SlackBot.Cache
   alias SlackBot.Config
   alias SlackBot.ConfigServer
+  alias SlackBot.Diagnostics
   alias SlackBot.EventBuffer
-  alias SlackBot.Cache
+  alias SlackBot.Logging
+  alias SlackBot.Telemetry
 
   @type option ::
           {:name, GenServer.name()}
@@ -61,6 +64,7 @@ defmodule SlackBot.ConnectionManager do
 
       now_ms() - state.last_activity > state.config.heartbeat_ms + state.config.ping_timeout_ms ->
         Logger.warning("[SlackBot] heartbeat timeout, restarting connection")
+        Telemetry.execute(state.config, [:connection, :heartbeat_timeout], %{count: 1}, %{})
         reset_transport(state, :heartbeat_timeout)
 
       true ->
@@ -70,6 +74,7 @@ defmodule SlackBot.ConnectionManager do
 
   def handle_info({:slackbot, :connected, pid}, state) do
     Logger.debug("[SlackBot] connected via #{inspect(pid)}")
+    Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{state: :connected})
 
     {:noreply,
      %{state | transport_pid: pid, transport_ref: Process.monitor(pid), last_activity: now_ms()}}
@@ -77,11 +82,13 @@ defmodule SlackBot.ConnectionManager do
 
   def handle_info({:slackbot, :disconnected, reason}, state) do
     Logger.warning("[SlackBot] disconnected: #{inspect(reason)}")
+    Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{state: :disconnected})
     reset_transport(state, reason)
   end
 
   def handle_info({:slackbot, :terminated, reason}, state) do
     Logger.warning("[SlackBot] transport terminated: #{inspect(reason)}")
+    Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{state: :terminated})
     reset_transport(state, reason)
   end
 
@@ -115,6 +122,12 @@ defmodule SlackBot.ConnectionManager do
         %{transport_ref: ref, transport_pid: pid} = state
       ) do
     Logger.warning("[SlackBot] transport down #{inspect(reason)}")
+
+    Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{
+      state: :down,
+      reason: reason
+    })
+
     reset_transport(state, reason)
   end
 
@@ -135,10 +148,17 @@ defmodule SlackBot.ConnectionManager do
 
       {:rate_limited, secs} ->
         Logger.warning("[SlackBot] rate limited, retrying in #{secs}s")
+        Telemetry.execute(config, [:connection, :rate_limited], %{delay_ms: secs * 1_000}, %{})
         schedule_reconnect(state, secs * 1_000)
 
       {:error, reason} ->
         Logger.warning("[SlackBot] failed to open connection #{inspect(reason)}")
+
+        Telemetry.execute(config, [:connection, :state], %{count: 1}, %{
+          state: :error,
+          reason: reason
+        })
+
         schedule_reconnect(state, backoff_delay(state))
     end
   end
@@ -165,6 +185,12 @@ defmodule SlackBot.ConnectionManager do
 
       {:error, reason} ->
         Logger.warning("[SlackBot] transport start failed #{inspect(reason)}")
+
+        Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{
+          state: :error,
+          reason: reason
+        })
+
         schedule_reconnect(state, backoff_delay(state))
     end
   end
@@ -202,6 +228,13 @@ defmodule SlackBot.ConnectionManager do
       {:noreply, state}
     else
       EventBuffer.record(state.config, key, envelope)
+
+      Diagnostics.record(state.config, :inbound, %{
+        type: type,
+        payload: payload,
+        meta: %{envelope_id: key, envelope: envelope}
+      })
+
       maybe_update_cache(type, payload, state.config)
 
       Task.Supervisor.start_child(state.task_supervisor, fn ->
@@ -219,13 +252,25 @@ defmodule SlackBot.ConnectionManager do
       assigns: config.assigns
     }
 
-    try do
-      config.module.handle_event(type, payload, context)
-    rescue
-      exception ->
-        Logger.error(Exception.format(:error, exception, __STACKTRACE__))
-        :error
-    end
+    Telemetry.span(
+      config,
+      [:handler, :dispatch],
+      %{type: type},
+      fn ->
+        result =
+          Logging.with_envelope(envelope, payload, fn ->
+            try do
+              config.module.handle_event(type, payload, context)
+            rescue
+              exception ->
+                Logger.error(Exception.format(:error, exception, __STACKTRACE__))
+                {:error, exception}
+            end
+          end)
+
+        {result, %{type: type}}
+      end
+    )
   end
 
   defp envelope_id(%{"envelope_id" => id}), do: id

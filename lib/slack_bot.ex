@@ -21,6 +21,7 @@ defmodule SlackBot do
   alias SlackBot.Config
   alias SlackBot.ConfigServer
   alias SlackBot.ConnectionManager
+  alias SlackBot.Diagnostics
 
   @reserved_supervisor_opts [:name, :config_server, :runtime_supervisor]
 
@@ -91,6 +92,14 @@ defmodule SlackBot do
   """
   @spec emit(GenServer.server(), {String.t(), map()}) :: :ok
   def emit(server \\ __MODULE__, {type, payload}) when is_binary(type) and is_map(payload) do
+    config = config(server)
+
+    Diagnostics.record(config, :outbound, %{
+      type: type,
+      payload: payload,
+      meta: %{origin: :emit}
+    })
+
     server
     |> resolve_connection_manager()
     |> ConnectionManager.emit(type, payload)

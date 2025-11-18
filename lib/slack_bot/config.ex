@@ -12,6 +12,7 @@ defmodule SlackBot.Config do
 
   alias SlackBot.API
   alias SlackBot.Socket
+  alias SlackBot.SlashAck.HTTP, as: AckHTTP
 
   @enforce_keys [:app_token, :bot_token, :module]
   defstruct [
@@ -31,6 +32,8 @@ defmodule SlackBot.Config do
     heartbeat_ms: 15_000,
     ping_timeout_ms: 5_000,
     ack_mode: :silent,
+    ack_client: AckHTTP,
+    diagnostics: %{enabled: false, buffer_size: 200},
     log_level: :info
   ]
 
@@ -55,6 +58,11 @@ defmodule SlackBot.Config do
           heartbeat_ms: pos_integer(),
           ping_timeout_ms: pos_integer(),
           ack_mode: :silent | :ephemeral | {:custom, (map(), t() -> any())},
+          ack_client: module(),
+          diagnostics: %{
+            enabled: boolean(),
+            buffer_size: pos_integer()
+          },
           log_level: Logger.level()
         }
 
@@ -118,6 +126,8 @@ defmodule SlackBot.Config do
          {:ok, heartbeat_ms} <- fetch_positive(opts, :heartbeat_ms),
          {:ok, ping_timeout_ms} <- fetch_positive(opts, :ping_timeout_ms),
          {:ok, ack_mode} <- fetch_ack_mode(opts),
+         {:ok, ack_client} <- fetch_module_option(opts, :ack_client, AckHTTP),
+         {:ok, diagnostics} <- fetch_diagnostics(opts),
          {:ok, log_level} <- fetch_log_level(opts) do
       {:ok,
        struct!(__MODULE__, %{
@@ -132,6 +142,8 @@ defmodule SlackBot.Config do
          heartbeat_ms: heartbeat_ms,
          ping_timeout_ms: ping_timeout_ms,
          ack_mode: ack_mode,
+         ack_client: ack_client,
+         diagnostics: diagnostics,
          log_level: log_level,
          transport: transport,
          transport_opts: transport_opts,
@@ -257,6 +269,28 @@ defmodule SlackBot.Config do
       {:ok, level}
     else
       {:error, {:invalid_log_level, level}}
+    end
+  end
+
+  defp fetch_diagnostics(opts) do
+    raw = Keyword.get(opts, :diagnostics, [])
+    defaults = %{enabled: false, buffer_size: 200}
+
+    map =
+      cond do
+        is_list(raw) -> Map.merge(defaults, Map.new(raw))
+        is_map(raw) -> Map.merge(defaults, raw)
+        is_boolean(raw) -> Map.put(defaults, :enabled, raw)
+        true -> :invalid
+      end
+
+    with %{enabled: enabled, buffer_size: buffer_size} = value when map != :invalid <- map,
+         true <- is_boolean(enabled) || {:error, {:invalid_diagnostics_enabled, enabled}},
+         true <- positive?(buffer_size) || {:error, {:invalid_diagnostics_buffer, buffer_size}} do
+      {:ok, value}
+    else
+      :invalid -> {:error, {:invalid_diagnostics_option, raw}}
+      {:error, reason} -> {:error, reason}
     end
   end
 

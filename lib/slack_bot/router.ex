@@ -39,6 +39,8 @@ defmodule SlackBot.Router do
 
   require Logger
 
+  alias SlackBot.SlashAck
+
   defmacro __using__(opts) do
     quote location: :keep do
       Module.register_attribute(__MODULE__, :slackbot_handlers, accumulate: true)
@@ -50,6 +52,7 @@ defmodule SlackBot.Router do
           handle_event: 4,
           middleware: 1,
           slash: 2,
+          slash: 3,
           grammar: 1,
           handle: 3,
           literal: 2,
@@ -89,27 +92,16 @@ defmodule SlackBot.Router do
 
   @doc """
   Declares a slash command with a grammar + handler pair.
+
+  Supports `:ack` option (`:inherit`, `:silent`, `:ephemeral`, or `{:custom, fun}`) to
+  override the configured auto-ack strategy.
   """
   defmacro slash(command, do: block) when is_binary(command) do
-    expanded = Macro.prewalk(block, &Macro.expand(&1, __CALLER__))
+    build_slash(command, [], block, __CALLER__)
+  end
 
-    entries = __normalize_block__(expanded)
-    grammar = fetch_section(entries, :grammar, __CALLER__)
-    handler = fetch_section(entries, :handle, __CALLER__)
-
-    grammar_nodes = expand_grammar(grammar)
-    {payload, ctx, body} = handler
-    fun = String.to_atom("__slackbot_slash_dsl_#{:erlang.unique_integer([:positive])}")
-    normalized = normalize_command_literal(command)
-
-    quote do
-      @slackbot_handlers {:slash_dsl, unquote(normalized), unquote(fun),
-                          unquote(Macro.escape(grammar_nodes))}
-
-      def unquote(fun)(unquote(payload), unquote(ctx)) do
-        unquote(body)
-      end
-    end
+  defmacro slash(command, opts, do: block) when is_binary(command) and is_list(opts) do
+    build_slash(command, opts, block, __CALLER__)
   end
 
   @doc """
@@ -126,6 +118,29 @@ defmodule SlackBot.Router do
   defmacro handle(payload, ctx, do: block) do
     quote do
       {:handle, unquote(payload), unquote(ctx), unquote(block)}
+    end
+  end
+
+  defp build_slash(command, opts, block, env) do
+    expanded = Macro.prewalk(block, &Macro.expand(&1, env))
+
+    entries = __normalize_block__(expanded)
+    grammar = fetch_section(entries, :grammar, env)
+    handler = fetch_section(entries, :handle, env)
+
+    grammar_nodes = expand_grammar(grammar)
+    {payload, ctx, body} = handler
+    fun = String.to_atom("__slackbot_slash_dsl_#{:erlang.unique_integer([:positive])}")
+    normalized = normalize_command_literal(command)
+    ack = Keyword.get(opts, :ack, :inherit)
+
+    quote do
+      @slackbot_handlers {:slash_dsl, unquote(normalized), unquote(fun),
+                          unquote(Macro.escape(grammar_nodes)), unquote(ack)}
+
+      def unquote(fun)(unquote(payload), unquote(ctx)) do
+        unquote(body)
+      end
     end
   end
 
@@ -242,14 +257,14 @@ defmodule SlackBot.Router do
         runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
         run_middlewares(middlewares, type, payload, ctx, runner)
 
-      {:slash_dsl, command, fun, grammar} ->
-        handle_dsl_command(module, fun, command, grammar, payload, ctx, middlewares)
+      {:slash_dsl, command, fun, grammar, opts} ->
+        handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
     end
   end
 
   defp match_handler?({:event, type, _}, type, _payload), do: true
 
-  defp match_handler?({:slash_dsl, _command, _fun, _grammar}, "slash_commands", payload) do
+  defp match_handler?({:slash_dsl, _command, _fun, _grammar, _opts}, "slash_commands", payload) do
     payload["command"] != nil
   end
 
@@ -358,7 +373,7 @@ defmodule SlackBot.Router do
     end
   end
 
-  defp handle_dsl_command(module, fun, command, grammar, payload, ctx, middlewares) do
+  defp handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares) do
     case payload_command(payload) do
       ^command ->
         text = (payload["text"] || "") |> String.trim()
@@ -367,6 +382,8 @@ defmodule SlackBot.Router do
              {:ok, parsed} <- SlackBot.CommandGrammar.match(grammar, tokens) do
           enriched = Map.put(parsed, :command, command)
           runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
+          ack_mode = resolve_ack_mode(opts, ctx)
+          maybe_ack(ack_mode, payload, ctx)
 
           run_middlewares(
             middlewares,
@@ -389,6 +406,25 @@ defmodule SlackBot.Router do
         :ok
     end
   end
+
+  defp resolve_ack_mode(option, ctx) do
+    base = ctx_ack_mode(ctx)
+
+    case option do
+      :inherit -> base
+      nil -> base
+      other -> other
+    end
+  end
+
+  defp ctx_ack_mode(%{config: %{ack_mode: mode}}), do: mode
+  defp ctx_ack_mode(_), do: :silent
+
+  defp maybe_ack(mode, payload, %{config: config}) do
+    SlashAck.maybe_ack(mode, payload, config)
+  end
+
+  defp maybe_ack(_mode, _payload, _ctx), do: :ok
 
   defp match_ast?(label, {label, _, _}), do: true
   defp match_ast?(label, {label, _}), do: true
