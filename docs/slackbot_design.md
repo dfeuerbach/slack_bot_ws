@@ -100,8 +100,9 @@ SlackBot.Supervisor
   - Graceful fallback to map helpers (`SlackBot.Blocks.section/2`, `button/2`, etc.) when BlockBox isn’t installed.
 - **Slash command auto-ack**: global/per-command `:silent | :ephemeral | {:custom, fun}` strategies. The `:ephemeral` option automatically posts “Processing…” via the slash `response_url`.
 - **Replay/simulation**: diagnostics ring buffer + `SlackBot.Diagnostics.replay/2` feed captured events back through the router for deterministic debugging.
+- **Telemetry & LiveDashboard**: `docs/telemetry_dashboard.md` explains how to hook the emitted events to LiveDashboard metrics or plain Telemetry handlers so teams can chart connection health without Phoenix dependencies baked into SlackBot.
+- **Examples**: `examples/basic_bot` demonstrates slash DSL grammars, middleware, diagnostics replay, and auto-ack in a runnable Mix project.
 - **Testing helpers**: `SlackBot.TestTransport` to assert ack timing, handler execution, and telemetry emission without live Slack connection.
-- **Telemetry docs**: sample `Telemetry.Metrics` definitions; instructions for wiring LiveDashboard (optional, Phoenix-only).
 
 ## Feature Parity Checklist
 - [x] WebSockex socket-mode client with `apps.connections.open` retries.

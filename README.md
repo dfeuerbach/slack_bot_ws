@@ -1,5 +1,7 @@
 # SlackBot
 
+![SlackBot WS](docs/images/slackbot_ws_logo.png)
+
 SlackBot is a socket-mode client for building resilient Slack automations in Elixir. It focuses on fast acknowledgements, supervised event handling, NimbleParsec-powered command parsing, and a developer-friendly configuration surface.
 
 ## Highlights
@@ -95,6 +97,19 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 Use `SlackBot.Cache.channels/1` and `SlackBot.Cache.users/1` to inspect cached metadata maintained by the runtime provider/mutation queue pair.
 
+## Example Bot
+
+The `examples/basic_bot/` directory contains a runnable Mix project that demonstrates:
+
+- the slash grammar DSL (optional/repeat segments),
+- middleware for logging,
+- diagnostics capture + replay from IEx,
+- auto-ack strategies (`:ephemeral`, `{:custom, fun}`),
+- optional BlockBox helpers (with graceful fallback if the dependency is absent).
+
+Follow the README inside that folder to run the example against a Slack dev workspace (it
+uses a path dependency pointing at this repo).
+
 ## Diagnostics & Replay
 
 Enable diagnostics in your config to keep a rolling buffer of inbound/outbound frames:
@@ -118,6 +133,13 @@ telemetry fire exactly as they did originally. For tests, pass `dispatch: fn ent
 to intercept the replay without touching the live connection. See
 [`docs/diagnostics.md`](docs/diagnostics.md) for advanced workflows.
 
+## Telemetry & LiveDashboard
+
+SlackBot emits Telemetry events for connection state, handler spans, diagnostics record/replay,
+and rate limiting. See [`docs/telemetry_dashboard.md`](docs/telemetry_dashboard.md) for
+LiveDashboard metric definitions and examples of attaching plain telemetry handlers when
+Phoenix is not available.
+
 ## Slash Command Grammar
 
 The `slash/2` DSL converts structured declarations into NimbleParsec parsers. A few real-world examples:
@@ -135,6 +157,7 @@ See [`docs/slash_grammar.md`](docs/slash_grammar.md) for the full macro referenc
 - `docs/feature_tracker.md` – phased implementation plan
 - `docs/slash_grammar.md` – comprehensive slash-command DSL guide
 - `docs/diagnostics.md` – diagnostics buffer + replay guide
+- `docs/telemetry_dashboard.md` – Telemetry + LiveDashboard integration
 
 Additional guides (BlockBox helpers, LiveDashboard wiring, examples) will land during later phases.
 

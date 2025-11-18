@@ -98,16 +98,16 @@ Layer on optional BlockBox integration, slash-command auto-ack helpers, diagnost
 ---
 
 ## Phase 6 – Docs, Examples & Final QA
-**Status:** Not Started  
+**Status:** In Progress  
 Polish user-facing documentation, sample bots, and perform end-to-end verification.
 
 ### Tasks
-- [ ] Update `docs/slackbot_design.md` with implementation notes + deltas.
-- [ ] Author README usage guide + quick-start sample (including BlockBox + parser examples).
-- [ ] Provide LiveDashboard/Telemetry integration guide.
-- [ ] Build sample bot in `examples/` demonstrating multi-phase features.
-- [ ] Run full test suite, dialyzer (if configured), credo/format, and document results.
-- [ ] Audit documentation coverage before publishing HexDocs (README, guides, `@doc`s).
+- [x] Update `docs/slackbot_design.md` with implementation notes + deltas (diagnostics, logging, auto-ack, DSL tutorial link).
+- [x] Author README usage guide + quick-start sample (highlighting BlockBox helpers, diagnostics replay, auto-ack stories).
+- [x] Provide LiveDashboard/Telemetry integration guide (document telemetry events, dashboard wiring).
+- [x] Build sample bot in `examples/` demonstrating middleware, slash DSL, diagnostics replay.
+- [ ] Run full QA sweep: `mix test`, `mix format --check-formatted`, `mix credo`, `mix dialyzer` (if configured) and capture results.
+- [ ] Audit documentation coverage before publishing HexDocs (README, guides, module `@doc`s, extras).
 
 ### Testing
 - `mix test`

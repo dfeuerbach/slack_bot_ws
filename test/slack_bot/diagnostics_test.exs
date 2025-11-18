@@ -56,7 +56,12 @@ defmodule SlackBot.DiagnosticsTest do
     parent = self()
     handler_id = {:diag_record, make_ref()}
 
-    :telemetry.attach(handler_id, [:slackbot, :diagnostics, :record], &__MODULE__.record_handler/4, parent)
+    :telemetry.attach(
+      handler_id,
+      [:slackbot, :diagnostics, :record],
+      &__MODULE__.record_handler/4,
+      parent
+    )
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
 
@@ -72,7 +77,12 @@ defmodule SlackBot.DiagnosticsTest do
     parent = self()
     handler_id = {:diag_replay, make_ref()}
 
-    :telemetry.attach(handler_id, [:slackbot, :diagnostics, :replay], &__MODULE__.record_handler/4, parent)
+    :telemetry.attach(
+      handler_id,
+      [:slackbot, :diagnostics, :replay],
+      &__MODULE__.record_handler/4,
+      parent
+    )
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
 
