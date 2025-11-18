@@ -1,7 +1,5 @@
 defmodule SlackBot.ConnectionManager do
-  @moduledoc """
-  Maintains the Slack Socket Mode connection, reconnection strategy, and event dispatch.
-  """
+  @moduledoc false
 
   use GenServer
 

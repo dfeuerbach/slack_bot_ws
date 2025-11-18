@@ -1,7 +1,5 @@
 defmodule SlackBot.ConfigServer do
-  @moduledoc """
-  GenServer responsible for building and exposing the immutable `%SlackBot.Config{}`.
-  """
+  @moduledoc false
 
   use GenServer
 

@@ -1,7 +1,5 @@
 defmodule SlackBot.RuntimeSupervisor do
-  @moduledoc """
-  Supervisor that owns runtime processes (connection manager, task supervisors, etc.).
-  """
+  @moduledoc false
 
   use Supervisor
 

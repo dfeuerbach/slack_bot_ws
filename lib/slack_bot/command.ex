@@ -1,81 +1,78 @@
 defmodule SlackBot.Command do
   @moduledoc """
-  NimbleParsec-based helpers for parsing slash commands and message text.
+  Tokenization helpers for slash commands.
+
+  The module normalizes whitespace, respects quoted strings, and exposes the lexer used by
+  the grammar DSL so each command receives reliable tokens before grammar matching.
   """
 
   import NimbleParsec
 
-  defmacro __using__(_opts) do
-    quote do
-      import SlackBot.Command
-    end
-  end
-
-  word =
+  literal_word =
     ascii_string([?a..?z, ?A..?Z, ?0..?9, ?-, ?_, ?/, ?., ?:], min: 1)
-    |> label("word")
 
   quoted =
     ignore(string("\""))
-    |> repeat(lookahead_not(string("\"")) |> choice([word, string(" ")]))
+    |> repeat(lookahead_not(string("\"")) |> choice([literal_word, string(" ")]))
     |> ignore(string("\""))
     |> reduce({IO, :iodata_to_binary, []})
 
-  argument =
+  token =
     choice([
       quoted,
       ascii_string([not: ?\s], min: 1)
     ])
-    |> unwrap_and_tag(:arg)
+    |> tag(:token)
 
   command =
-    string("/")
-    |> concat(word)
+    ignore(optional(ascii_string([?\s], min: 1)))
+    |> ignore(string("/"))
+    |> concat(literal_word)
     |> reduce({__MODULE__, :normalize_command, []})
+    |> tag(:command)
 
-  def normalize_command(["/", cmd]), do: cmd
-
-  token = argument
-
-  slash_command =
-    command
+  lexer =
+    optional(command)
+    |> optional(token)
     |> repeat(ignore(ascii_char([?\s])) |> concat(token))
     |> eos()
-    |> reduce({__MODULE__, :build_slash_command, []})
+    |> reduce({__MODULE__, :build_tokens, []})
 
-  defparsec(:do_parse_slash, slash_command)
+  defparsec(:do_lex, lexer)
 
-  def build_slash_command(parts) do
-    {cmd, tokens} = List.pop_at(parts, 0)
+  @doc false
+  def normalize_command(["/", cmd]), do: cmd
+  def normalize_command(cmd) when is_binary(cmd), do: cmd
+  def normalize_command(cmd) when is_list(cmd), do: to_string(cmd)
 
-    {flags, args} =
-      Enum.reduce(tokens, {%{}, []}, fn {:arg, value}, {flags, args} ->
-        case classify_token(value) do
-          {:flag, name, val} -> {Map.put(flags, name, val), args}
-          :arg -> {flags, args ++ [value]}
-        end
+  def build_tokens(items) do
+    {command, tokens} =
+      Enum.reduce(items, {nil, []}, fn
+        {:command, cmd}, {_cmd, tokens} -> {to_binary(cmd), tokens}
+        {:token, value}, {cmd, tokens} -> {cmd, [to_binary(value) | tokens]}
+        nil, acc -> acc
       end)
 
-    %{
-      command: cmd,
-      flags: flags,
-      args: args
-    }
+    %{command: command && to_binary(command), tokens: Enum.reverse(tokens)}
   end
 
-  def parse_slash(text) when is_binary(text) do
-    case do_parse_slash(text) do
-      {:ok, [result], _, _, _, _} -> result
-      {:error, reason, rest, context, line, column} -> {:error, reason, rest, context, line, column}
+  defp to_binary(nil), do: nil
+  defp to_binary(value) when is_binary(value), do: value
+  defp to_binary(value) when is_list(value), do: IO.iodata_to_binary(value)
+
+  @doc """
+  Tokenizes slash command text, returning the optional command literal and a list of tokens.
+  """
+  @spec lex(String.t()) ::
+          %{command: String.t() | nil, tokens: [String.t()]}
+          | {:error, term()}
+  def lex(text) when is_binary(text) do
+    case do_lex(text) do
+      {:ok, [result], _, _, _, _} ->
+        result
+
+      {:error, reason, rest, context, line, column} ->
+        {:error, {reason, rest, context, line, column}}
     end
   end
-
-  defp classify_token("--" <> rest) do
-    case String.split(rest, "=", parts: 2) do
-      [name, value] -> {:flag, String.to_atom(name), value}
-      _ -> :arg
-    end
-  end
-
-  defp classify_token(_other), do: :arg
 end

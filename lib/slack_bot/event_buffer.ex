@@ -1,7 +1,5 @@
 defmodule SlackBot.EventBuffer do
-  @moduledoc """
-  Facade for deduplicating Socket Mode envelopes with pluggable adapters.
-  """
+  @moduledoc false
 
   alias SlackBot.EventBuffer.Server
   alias SlackBot.EventBuffer.Adapters.ETS

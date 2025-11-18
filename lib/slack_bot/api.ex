@@ -1,7 +1,5 @@
 defmodule SlackBot.API do
-  @moduledoc """
-  Minimal Slack Web API client used by SlackBot runtime.
-  """
+  @moduledoc false
 
   @slack_base "https://slack.com/api/"
 

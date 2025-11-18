@@ -1,7 +1,5 @@
 defmodule SlackBot.EventBuffer.Adapters.ETS do
-  @moduledoc """
-  ETS-backed adapter storing envelopes for dedupe/replay.
-  """
+  @moduledoc false
 
   @behaviour SlackBot.EventBuffer.Adapter
 

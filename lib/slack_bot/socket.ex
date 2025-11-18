@@ -1,7 +1,5 @@
 defmodule SlackBot.Socket do
-  @moduledoc """
-  WebSocket client responsible for interacting with Slack Socket Mode.
-  """
+  @moduledoc false
 
   use WebSockex
 

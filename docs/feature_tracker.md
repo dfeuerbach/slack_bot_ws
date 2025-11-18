@@ -69,6 +69,7 @@ Ship the NimbleParsec-powered command/message parsing plus declarative handler D
 - [x] Provide `handle_event`, `handle_slash`, `middleware` macros.
 - [x] Build middleware pipeline execution (before/after hooks).
 - [x] Integrate parser output into handler invocation path with slash payload enrichment.
+- [x] Add `slash/2` grammar DSL (literal/value/optional/repeat/choice) compiled to per-command parsers.
 - [x] Unit tests for parsers, DSL-generated functions, and middleware behavior.
 
 ### Testing
@@ -88,6 +89,7 @@ Layer on optional BlockBox integration, slash-command auto-ack helpers, diagnost
 - [ ] Provide slash-command auto-ack strategies (`:silent`, `:ephemeral`, `{:custom, fun}`).
 - [ ] Document Telemetry events + sample metrics definitions.
 - [ ] Tests covering diagnostics toggles, BlockBox opt-in/out, auto-ack flows.
+- [ ] Document every new public module/function with HexDocs-ready `@moduledoc`/`@doc`.
 
 ### Testing
 - `mix test test/slack_bot/diagnostics_test.exs`
@@ -105,6 +107,7 @@ Polish user-facing documentation, sample bots, and perform end-to-end verificati
 - [ ] Provide LiveDashboard/Telemetry integration guide.
 - [ ] Build sample bot in `examples/` demonstrating multi-phase features.
 - [ ] Run full test suite, dialyzer (if configured), credo/format, and document results.
+- [ ] Audit documentation coverage before publishing HexDocs (README, guides, `@doc`s).
 
 ### Testing
 - `mix test`

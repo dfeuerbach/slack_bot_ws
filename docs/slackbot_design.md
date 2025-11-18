@@ -67,15 +67,26 @@ SlackBot.Supervisor
   - lightweight key/value segments users often express inline (`env=prod`, `duration=5m`)
   - user/channel mentions (`<@U123>`, `<#C456>`) and emoji shortcuts
   - mention-triggered chat patterns (`@bot deploy foo`) without imposing CLI semantics.
+- Grammar-aware DSL compiles declarative literals/values/optionals/repeats/choices into per-command parsers so handlers receive structured maps (`%{command: "cmd", short?: true, params: [...]}`) instead of raw token lists. See `docs/slash_grammar.md` for the full macro reference and examples.
 - DSL example:
   ```elixir
-  handle_slash "/deploy", cmd do
-    with {:ok, parsed} <- SlackBot.Command.parse(cmd, :deploy) do
-      Deployments.kick(parsed.service, parsed.env)
+  slash "/deploy" do
+    grammar do
+      value :service
+      optional literal("short", as: :short?)
+      repeat do
+        literal "param"
+        value :params
+      end
+    end
+
+    handle payload, ctx do
+      parsed = payload["parsed"]
+      Deployments.kick(parsed.service, parsed.params, ctx)
     end
   end
   ```
-- Message commands reuse the same parsecs, so bot authors avoid bespoke regex trees for mentions or structured snippets.
+- Legacy `handle_slash/3` handlers still work and now receive `payload["parsed"].args` from the tokenizer so existing bots avoid bespoke regex trees for mentions or structured snippets.
 
 ### Middleware & Diagnostics
 - Middleware pipeline (plug-like): `before_event/3`, `after_event/4`.

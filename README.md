@@ -6,7 +6,7 @@ SlackBot is a socket-mode client for building resilient Slack automations in Eli
 - Supervised WebSocket connection manager with rate-limit aware backoff and heartbeat monitoring
 - Task-based event fan-out with dedupe and replay safeguards
 - Declarative handler DSL for events, slash commands, shortcuts, and middleware
-- NimbleParsec parsing for deterministic slash-command and mention handling
+- Slash-command grammar DSL compiled via NimbleParsec for deterministic parsing
 - Optional BlockBox integration for composing Block Kit payloads
 - Telemetry, structured logging, diagnostics buffers, and replay tooling
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
@@ -55,12 +55,26 @@ defmodule MyBot do
     SlackBot.Cache.channels(ctx.bot) |> log_join(event["channel"])
   end
 
-  handle_slash "/deploy", payload, ctx do
-    parsed = payload["parsed"]
-    Deployments.kick(Enum.at(parsed.args, 0), parsed.flags[:env], ctx)
+  slash "/deploy" do
+    grammar do
+      value :service
+      optional literal("short", as: :short?)
+      repeat do
+        literal "param"
+        value :params
+      end
+    end
+
+    handle payload, ctx do
+      parsed = payload["parsed"]
+      Deployments.kick(parsed.service, parsed.params, ctx)
+    end
   end
 end
 ```
+
+> Existing bots using `handle_slash/3` still work. `payload["parsed"].args` now contains
+> the tokenized arguments for those handlers, while the DSL produces structured maps.
 
 3. Supervise SlackBot alongside your application processes:
 
@@ -78,9 +92,22 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 Use `SlackBot.Cache.channels/1` and `SlackBot.Cache.users/1` to inspect cached metadata maintained by the runtime provider/mutation queue pair.
 
+## Slash Command Grammar
+
+The `slash/2` DSL converts structured declarations into NimbleParsec parsers. A few real-world examples:
+
+| Slack Input | DSL snippet | Handler payload |
+| --- | --- | --- |
+| `/cmd project report` | `literal "project", as: :mode, value: :project_report`<br>`literal "report"` | `%{command: "cmd", mode: :project_report}` |
+| `/cmd team marketing show` | `literal "team", as: :mode, value: :team_show`<br>`value :team_name`<br>`literal "show"` | `%{command: "cmd", mode: :team_show, team_name: "marketing"}` |
+| `/cmd report team one team two team three` | `literal "report", as: :mode, value: :report_teams`<br>`repeat do literal "team"; value :teams end` | `%{command: "cmd", mode: :report_teams, teams: ["one","two","three"]}` |
+
+See [`docs/slash_grammar.md`](docs/slash_grammar.md) for the full macro reference and more examples.
+
 ## Documentation
 - `docs/slackbot_design.md` – system design, goals, and architecture
 - `docs/feature_tracker.md` – phased implementation plan
+- `docs/slash_grammar.md` – comprehensive slash-command DSL guide
 
 Additional guides (BlockBox helpers, LiveDashboard wiring, examples) will land during later phases.
 
