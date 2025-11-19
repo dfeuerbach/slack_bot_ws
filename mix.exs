@@ -7,8 +7,14 @@ defmodule SlackBot.MixProject do
       version: "0.1.0",
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
+      source_url: "https://github.com/dfeuerbach/slack_bot_ws",
+      description: description(),
+      package: package(),
       deps: deps(),
       docs: [
+        main: "readme",
+        source_ref: "master",
+        source_url: "https://github.com/dfeuerbach/slack_bot_ws",
         extras: [
           "README.md",
           "docs/slash_grammar.md",
@@ -34,6 +40,22 @@ defmodule SlackBot.MixProject do
       {:req, "~> 0.4"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"}
+    ]
+  end
+
+  defp description do
+    "Socket Mode toolkit for building resilient Slack automations in Elixir."
+  end
+
+  defp package do
+    [
+      maintainers: ["Douglas Feuerbach"],
+      licenses: ["MIT"],
+      links: %{
+        "GitHub" => "https://github.com/dfeuerbach/slack_bot_ws",
+        "Changelog" => "https://github.com/dfeuerbach/slack_bot_ws/blob/master/CHANGELOG.md"
+      },
+      files: ~w(lib docs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
 end
