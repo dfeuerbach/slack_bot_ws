@@ -7,6 +7,8 @@ defmodule SlackBot.Socket do
 
   alias SlackBot.Diagnostics
 
+  @interactive_types ~w(shortcut block_actions view_submission view_closed)
+
   def start_link(url, opts) do
     manager = Keyword.fetch!(opts, :manager)
     config = Keyword.fetch!(opts, :config)
@@ -65,15 +67,18 @@ defmodule SlackBot.Socket do
   defp handle_decoded(%{"payload" => payload} = envelope, state) do
     ack(envelope, state.config)
 
-    case payload do
-      %{"event" => event = %{"type" => type}} ->
+    case classify_payload(payload) do
+      {:event, type, event} ->
         send(state.manager, {:slackbot, :event, type, event, envelope})
 
-      %{"type" => "slash_commands"} ->
-        send(state.manager, {:slackbot, :slash_command, payload, envelope})
+      {:slash, slash_payload} ->
+        send(state.manager, {:slackbot, :slash_command, slash_payload, envelope})
 
-      _ ->
-        send(state.manager, {:slackbot, :unknown, payload})
+      {:interactive, type, interactive_payload} ->
+        send(state.manager, {:slackbot, :event, type, interactive_payload, envelope})
+
+      {:unknown, unknown} ->
+        send(state.manager, {:slackbot, :unknown, unknown})
     end
 
     {:ok, state}
@@ -121,4 +126,14 @@ defmodule SlackBot.Socket do
 
     {:ok, state}
   end
+
+  @doc false
+  def classify_payload(%{"event" => event = %{"type" => type}}), do: {:event, type, event}
+  def classify_payload(%{"type" => "slash_commands"} = payload), do: {:slash, payload}
+
+  def classify_payload(%{"type" => type} = payload) when type in @interactive_types do
+    {:interactive, type, payload}
+  end
+
+  def classify_payload(payload), do: {:unknown, payload}
 end

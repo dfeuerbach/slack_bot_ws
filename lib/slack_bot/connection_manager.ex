@@ -87,6 +87,17 @@ defmodule SlackBot.ConnectionManager do
     reset_transport(state, reason)
   end
 
+  def handle_info({:slackbot, :disconnect, payload}, state) do
+    Logger.warning("[SlackBot] remote disconnect requested: #{inspect(payload)}")
+
+    Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{
+      state: :disconnect,
+      reason: payload
+    })
+
+    reset_transport(state, {:remote_disconnect, payload})
+  end
+
   def handle_info({:slackbot, :terminated, reason}, state) do
     Logger.warning("[SlackBot] transport terminated: #{inspect(reason)}")
     Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{state: :terminated})

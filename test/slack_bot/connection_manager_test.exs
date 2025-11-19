@@ -95,4 +95,14 @@ defmodule SlackBot.ConnectionManagerTest do
     assert_receive {:handled, "channel_left", _payload, _ctx}
     assert Cache.channels(config) == []
   end
+
+  test "reconnects when Slack sends a disconnect", %{transport: transport_pid} do
+    capture_log(fn ->
+      SlackBot.TestTransport.disconnect(transport_pid, %{"reason" => "refresh"})
+
+      assert_receive {:test_transport, new_pid}
+      assert is_pid(new_pid)
+      refute new_pid == transport_pid
+    end)
+  end
 end
