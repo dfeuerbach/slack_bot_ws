@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Developer Experience
 - Declarative handler DSL (`handle_event`, `slash`, grammar combinators, middleware) powered by NimbleParsec for deterministic slash command parsing.
 - Slash auto-ack strategies (`:silent`, `:ephemeral`, `{:custom, fun}`) with configurable default text and response-url transport.
-- Plug-like middleware pipeline for cross-cutting concerns (logging, auth, metrics) across all handlers.
+- Plug-like middleware pipeline for cross-cutting concerns (logging, auth, metrics) across all handlers, with sequential execution of every `handle_event/3` defined for an event type and short-circuit control via `{:halt, resp}`.
 - Optional BlockBox integration for Block Kit helpers, `SlackBot.emit/2` for synthetic events.
 - Example bot showcasing middleware, diagnostics, and slash grammars to accelerate ramp-up.
 - Live diagnostics ring buffer with replay tooling so developers can reproduce issues locally without relying on Slack retries.

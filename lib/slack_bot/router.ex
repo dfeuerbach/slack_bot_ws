@@ -249,26 +249,38 @@ defmodule SlackBot.Router do
     handlers = module.__slackbot_handlers__()
     middlewares = module.__slackbot_middlewares__()
 
-    case Enum.find(handlers, &match_handler?(&1, type, payload)) do
-      nil ->
-        :ok
+    cond do
+      type == "slash_commands" ->
+        case find_slash_handler(handlers, payload) do
+          nil ->
+            :ok
 
-      {:event, _type, fun} ->
-        runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
-        run_middlewares(middlewares, type, payload, ctx, runner)
+          {:slash_dsl, command, fun, grammar, opts} ->
+            handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
+        end
 
-      {:slash_dsl, command, fun, grammar, opts} ->
-        handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
+      true ->
+        handlers
+        |> Enum.filter(&match_event?(&1, type))
+        |> Enum.reduce(:ok, fn {:event, _type, fun}, _acc ->
+          runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
+          run_middlewares(middlewares, type, payload, ctx, runner)
+        end)
     end
   end
 
-  defp match_handler?({:event, type, _}, type, _payload), do: true
+  defp find_slash_handler(handlers, payload) do
+    Enum.find(handlers, fn
+      {:slash_dsl, command, _fun, _grammar, _opts} ->
+        payload_command(payload) == command
 
-  defp match_handler?({:slash_dsl, command, _fun, _grammar, _opts}, "slash_commands", payload) do
-    payload_command(payload) == command
+      _ ->
+        false
+    end)
   end
 
-  defp match_handler?(_, _, _), do: false
+  defp match_event?({:event, type, _}, type), do: true
+  defp match_event?(_, _), do: false
 
   defp run_middlewares([], _type, payload, ctx, fun) do
     fun.(payload, ctx)

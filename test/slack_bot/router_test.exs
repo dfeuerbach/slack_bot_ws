@@ -71,6 +71,18 @@ defmodule SlackBot.RouterTest do
     end
   end
 
+  defmodule MultiEventRouter do
+    use SlackBot
+
+    handle_event "message", event, ctx do
+      send(ctx.assigns.test_pid, {:multi_event, 1, event})
+    end
+
+    handle_event "message", event, ctx do
+      send(ctx.assigns.test_pid, {:multi_event, 2, event})
+    end
+  end
+
   test "dispatches message events" do
     ctx = ctx(DemoRouter)
     DemoRouter.handle_event("message", %{"text" => "hi"}, ctx)
@@ -88,6 +100,15 @@ defmodule SlackBot.RouterTest do
     )
 
     assert_receive {:slash, %{command: "deploy", service: "app", env: "prod"}}
+  end
+
+  test "dispatches all handlers registered for the same event" do
+    ctx = ctx(MultiEventRouter)
+
+    MultiEventRouter.handle_event("message", %{"text" => "hi"}, ctx)
+
+    assert_receive {:multi_event, 1, %{"text" => "hi"}}
+    assert_receive {:multi_event, 2, %{"text" => "hi"}}
   end
 
   defmodule GrammarRouter do
