@@ -22,6 +22,7 @@ defmodule SlackBot do
   alias SlackBot.ConfigServer
   alias SlackBot.ConnectionManager
   alias SlackBot.Diagnostics
+  alias SlackBot.Telemetry
 
   @reserved_supervisor_opts [:name, :config_server, :runtime_supervisor]
 
@@ -84,7 +85,27 @@ defmodule SlackBot do
   @spec push(GenServer.server(), {String.t(), map()}) :: {:ok, map()} | {:error, term()}
   def push(server \\ __MODULE__, {method, body}) when is_binary(method) and is_map(body) do
     config = config(server)
-    config.http_client.post(method, config.bot_token, body)
+
+    start = System.monotonic_time()
+
+    try do
+      result = config.http_client.post(method, config.bot_token, body)
+      duration = System.monotonic_time() - start
+
+      Telemetry.execute(
+        config,
+        [:api, :request],
+        %{duration: duration},
+        %{method: method, status: api_status(result)}
+      )
+
+      result
+    rescue
+      exception ->
+        duration = System.monotonic_time() - start
+        Telemetry.execute(config, [:api, :request], %{duration: duration}, %{method: method, status: :exception})
+        reraise exception, __STACKTRACE__
+    end
   end
 
   @doc """
@@ -139,4 +160,8 @@ defmodule SlackBot do
       use SlackBot.Router, unquote(opts)
     end
   end
+
+  defp api_status({:ok, _}), do: :ok
+  defp api_status({:error, _}), do: :error
+  defp api_status(_), do: :unknown
 end
