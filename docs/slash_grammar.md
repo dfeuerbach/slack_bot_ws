@@ -1,9 +1,6 @@
 # Slash Command Grammar DSL
 
-The `slash/2` DSL is built to make slash commands deterministic, easy to maintain, and
-fast. Instead of manually splitting strings or juggling regexes, you describe the format
-you expect and let SlackBot generate a NimbleParsec parser at compile time. This guide
-teaches the DSL in layers so you can follow along as the commands grow in complexity.
+The `slash/2` DSL is built to make slash commands deterministic, easy to maintain, and fast. Instead of manually splitting strings or juggling regexes, you describe the format you expect and SlackBot generates a parser at compile time. This guide teaches the DSL in layers so you can follow along as the commands grow in complexity.
 
 ---
 
@@ -13,7 +10,8 @@ teaches the DSL in layers so you can follow along as the commands grow in comple
 - **Readable expectations** – the command format lives next to the handler, making code
   reviews and maintenance straightforward.
 - **Compile-time validation** – malformed definitions fail fast, before your bot ships.
-- **Battle-tested parsing** – NimbleParsec handles quoting, whitespace, and edge cases.
+- **Battle-tested parsing** – handles quoting, whitespace, and tricky edge cases without
+  extra work on your part.
 
 ---
 
