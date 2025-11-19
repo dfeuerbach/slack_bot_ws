@@ -43,9 +43,21 @@ defmodule SlackBot.ConfigServer do
   end
 
   def handle_call({:reload, overrides}, _from, config) do
-    case Config.build(overrides) do
+    merged_opts =
+      config
+      |> config_to_opts()
+      |> Keyword.merge(overrides)
+
+    case Config.build(merged_opts) do
       {:ok, new_config} -> {:reply, :ok, new_config}
       {:error, reason} -> {:reply, {:error, reason}, config}
     end
+  end
+
+  defp config_to_opts(%Config{} = config) do
+    config
+    |> Map.from_struct()
+    |> Map.delete(:__struct__)
+    |> Enum.into([])
   end
 end
