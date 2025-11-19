@@ -36,10 +36,12 @@ defmodule SlackBot.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
+      {:finch, "~> 0.20"},
       {:websockex, "~> 0.4"},
       {:req, "~> 0.4"},
       {:jason, "~> 1.4"},
-      {:nimble_parsec, "~> 1.4"}
+      {:nimble_parsec, "~> 1.4"},
+      {:redix, "~> 1.2", optional: true}
     ]
   end
 

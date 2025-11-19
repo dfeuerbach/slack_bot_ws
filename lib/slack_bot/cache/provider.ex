@@ -33,6 +33,11 @@ defmodule SlackBot.Cache.Provider do
     {:reply, :ok, apply_op(state, op)}
   end
 
+  @impl true
+  def handle_cast({:mutate, op}, state) do
+    {:noreply, apply_op(state, op)}
+  end
+
   defp apply_op(state, {:join_channel, channel}) do
     %{state | channels: MapSet.put(state.channels, channel)}
   end

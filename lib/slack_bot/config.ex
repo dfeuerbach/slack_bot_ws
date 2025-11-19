@@ -120,8 +120,8 @@ defmodule SlackBot.Config do
          {:ok, transport_opts} <- fetch_keyword(opts, :transport_opts, []),
          {:ok, http_client} <- fetch_module_option(opts, :http_client, API),
          {:ok, assigns} <- fetch_assigns(opts),
-         {:ok, cache} <- fetch_tuple(opts, :cache),
-         {:ok, event_buffer} <- fetch_tuple(opts, :event_buffer),
+         {:ok, cache} <- fetch_cache(opts),
+         {:ok, event_buffer} <- fetch_event_buffer(opts),
          {:ok, block_builder} <- fetch_block_builder(opts),
          {:ok, backoff} <- fetch_backoff(opts),
          {:ok, heartbeat_ms} <- fetch_positive(opts, :heartbeat_ms),
@@ -208,10 +208,35 @@ defmodule SlackBot.Config do
     end
   end
 
-  defp fetch_tuple(opts, key) do
-    case Keyword.get(opts, key, {:ets, []}) do
-      {type, cfg} when type in [:ets, :adapter] -> {:ok, {type, cfg}}
-      other -> {:error, {:invalid_tuple_option, key, other}}
+  defp fetch_cache(opts) do
+    case Keyword.get(opts, :cache, {:ets, []}) do
+      {:ets, adapter_opts} when is_list(adapter_opts) ->
+        {:ok, {:ets, adapter_opts}}
+
+      {:adapter, module} when is_atom(module) ->
+        {:ok, {:adapter, module, []}}
+
+      {:adapter, module, adapter_opts} when is_atom(module) and is_list(adapter_opts) ->
+        {:ok, {:adapter, module, adapter_opts}}
+
+      other ->
+        {:error, {:invalid_cache_option, other}}
+    end
+  end
+
+  defp fetch_event_buffer(opts) do
+    case Keyword.get(opts, :event_buffer, {:ets, []}) do
+      {:ets, adapter_opts} when is_list(adapter_opts) ->
+        {:ok, {:ets, adapter_opts}}
+
+      {:adapter, module} when is_atom(module) ->
+        {:ok, {:adapter, module, []}}
+
+      {:adapter, module, adapter_opts} when is_atom(module) and is_list(adapter_opts) ->
+        {:ok, {:adapter, module, adapter_opts}}
+
+      other ->
+        {:error, {:invalid_event_buffer_option, other}}
     end
   end
 

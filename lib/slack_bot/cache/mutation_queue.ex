@@ -15,6 +15,12 @@ defmodule SlackBot.Cache.MutationQueue do
   end
 
   @impl true
+  def handle_cast({:mutate, op}, %{provider: provider} = state) do
+    GenServer.cast(provider, {:mutate, op})
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_call({:mutate, op}, _from, %{provider: provider} = state) do
     GenServer.call(provider, {:mutate, op})
     {:reply, :ok, state}

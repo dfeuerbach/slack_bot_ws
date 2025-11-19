@@ -9,13 +9,14 @@ defmodule SlackBot.EventBuffer do
           | {:adapter, module(), keyword()}
 
   @spec child_spec(SlackBot.Config.t()) :: Supervisor.child_spec()
-  def child_spec(config) do
-    {adapter, opts} = adapter_from_config(config)
+  def child_spec(%SlackBot.Config{} = config) do
+    {adapter, raw_opts} = adapter_from_config(config)
     name = server_name(config.instance_name)
+    adapter_opts = Keyword.put_new(raw_opts, :instance_name, config.instance_name)
 
     %{
       id: name,
-      start: {Server, :start_link, [[name: name, adapter: adapter, adapter_opts: opts]]},
+      start: {Server, :start_link, [[name: name, adapter: adapter, adapter_opts: adapter_opts]]},
       type: :worker
     }
   end

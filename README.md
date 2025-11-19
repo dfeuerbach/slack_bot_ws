@@ -7,8 +7,10 @@ SlackBot is a socket-mode client for building resilient Slack automations in Eli
 ## Highlights
 - Supervised WebSocket connection manager with rate-limit aware backoff and heartbeat monitoring
 - Task-based event fan-out with dedupe and replay safeguards
+- Pluggable cache/event buffer adapters (ETS by default, Redis adapter included for multi-node dedupe)
 - Declarative handler DSL for events, slash commands, shortcuts, and middleware
 - Slash-command grammar DSL that produces deterministic, structured payloads
+- Native routing for Slack interactivity payloads (global & message shortcuts, block actions, modal submissions)
 - Optional BlockBox integration for composing Block Kit payloads (see [BlockBox docs](https://hexdocs.pm/blockbox/BlockBox.html))
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
@@ -81,6 +83,54 @@ end
 > Existing bots using `handle_slash/3` still work. `payload["parsed"].args` now contains
 > the tokenized arguments for those handlers, while the DSL produces structured maps.
 
+Interactive payloads (global shortcuts, message shortcuts, block actions, modal submissions) are delivered to the router using their native Slack type. Use the regular `handle_event/3` macro or pattern match on the payload:
+
+```elixir
+handle_event "shortcut", payload, ctx do
+  if payload["callback_id"] == "demo-shortcut" do
+    MyApp.handle_shortcut(payload, ctx)
+  end
+end
+```
+
+## Event Pipeline & Middleware
+
+SlackBot routes every non-slash event through a Plug-like pipeline:
+
+1. Each middleware (declared via `middleware/1`) receives `{type, payload, ctx}` and decides whether to continue (`{:cont, new_payload, new_ctx}`) or short-circuit (`{:halt, response}`).
+2. Every `handle_event` definition matching the event type runs in declaration order, letting you layer responsibilities (logging, ACL checks, cache updates, business logic) without cramming them into one function.
+
+```elixir
+defmodule LayeredRouter do
+  use SlackBot
+
+  # Log every inbound message
+  middleware fn "message", payload, ctx ->
+    Logger.debug("incoming=#{payload["text"]}")
+    {:cont, payload, ctx}
+  end
+
+  # Stop the pipeline if this user is blocked
+  middleware fn "message", payload, ctx ->
+    if payload["user"] in ctx.assigns.blocked_users do
+      {:halt, {:error, :blocked}}
+    else
+      {:cont, payload, ctx}
+    end
+  end
+
+  handle_event "message", payload, ctx do
+    Cache.record_message(ctx.assigns.tenant_id, payload)
+  end
+
+  handle_event "message", payload, ctx do
+    Replies.respond(payload, ctx)
+  end
+end
+```
+
+In this example the cache update and reply logic stay isolated, yet both run for each message. If the second middleware halts, neither handler executes—exactly like a Plug pipeline. Slash commands keep their single match semantics so only the grammar that owns `/cmd` fires.
+
 3. Supervise SlackBot alongside your application processes:
 
 ```elixir
@@ -97,6 +147,22 @@ Supervisor.start_link(children, strategy: :one_for_one)
 
 Use `SlackBot.Cache.channels/1` and `SlackBot.Cache.users/1` to inspect cached metadata maintained by the runtime provider/mutation queue pair.
 
+## Adapters & Multi-node Deployments
+
+Both the cache and event buffer accept custom adapters so you can share state across BEAM nodes or move metadata into Redis:
+
+```elixir
+config :slack_bot_ws, SlackBot,
+  cache: {:adapter, SlackBot.Cache.Adapters.ETS, []},
+  event_buffer:
+    {:adapter, SlackBot.EventBuffer.Adapters.Redis,
+     redis: [host: "127.0.0.1", port: 6379], namespace: "slackbot"}
+```
+
+- `SlackBot.Cache.Adapters.ETS` keeps the original provider/mutation queue semantics for single-node deployments. Supply `cache: {:ets, [mode: :async]}` if you prefer fire-and-forget writes that never block the socket.
+- `SlackBot.EventBuffer.Adapters.Redis` ships with the toolkit and uses `Redix` under the hood; pass your own options or wrap the behaviour to integrate alternative datastores.
+- Implement `SlackBot.Cache.Adapter` / `SlackBot.EventBuffer.Adapter` to plug in any backend—tests demonstrate lightweight adapters for reference.
+
 ## Example Bot
 
 The `examples/basic_bot/` directory contains a runnable Mix project that demonstrates:
@@ -109,6 +175,11 @@ The `examples/basic_bot/` directory contains a runnable Mix project that demonst
 
 Follow the README inside that folder to run the example against a Slack dev workspace (it
 uses a path dependency pointing at this repo).
+
+## Web API helpers
+
+- `SlackBot.push/2` remains synchronous when you want to await the response.
+- `SlackBot.push_async/2` runs requests under the managed `Task.Supervisor`, keeping handlers responsive while telemetry + retries still flow through the same pipeline.
 
 ## Diagnostics & Replay
 
@@ -168,6 +239,10 @@ Additional guides (BlockBox helpers, LiveDashboard wiring, examples) will land d
 - Credo/Dialyzer (when configured): `mix credo`, `mix dialyzer`
 
 Use the feature tracker to determine which tests or sample apps should run for a given phase.
+
+### Test helpers
+
+`SlackBot.TestTransport` and `SlackBot.TestHTTP` are packaged under `lib/slack_bot/testing/` for reuse. Point your config at the transport to simulate Socket Mode traffic or inject the HTTP client when exercising `SlackBot.push/2` in isolation.
 
 ## License
 

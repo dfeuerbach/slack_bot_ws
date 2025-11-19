@@ -44,8 +44,8 @@ SlackBot.Supervisor
 
 ### Event Buffer & Caching
 - `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks: `insert(envelope_id)`, `seen?(envelope_id)`, `delete(envelope_id)`, `fetch_pending/0`.
-- Custom adapters (Redis, Database) can be plugged for multi-node dedupe/replay.
-- `SlackBot.Cache` follows provider/mutation-queue pattern: reads via provider GenServer, writes funneled through mutation queue, supporting channel membership, user profile snapshots, and conversation metadata.
+- Redis adapter ships with the toolkit (powered by `Redix`) so envelope dedupe/replay can be shared across nodes without additional plumbing.
+- `SlackBot.Cache` now exposes an adapter behaviour as well; the default ETS provider/mutation queue remains available, but you can plug Redis or any datastore while benefiting from the same public API. Set `mode: :async` inside the adapter opts when you want cache writes to be fire-and-forget.
 
 ### Command Router & Parsing
 - NimbleParsec baked in (non-optional). Default combinators handle:
@@ -74,7 +74,7 @@ SlackBot.Supervisor
   ```
 
 ### Middleware, Logging & Diagnostics
-- Middleware pipeline (plug-like) wraps every dispatch; shared modules (logging, metrics, auth) can short-circuit or mutate payloads.
+- Middleware pipeline (Plug-like) wraps every dispatch; middlewares can mutate payload/context or halt the chain entirely (`{:halt, resp}`), and **every** `handle_event/3` defined for a given type runs in declaration order so you can layer cache updates, metrics, and business logic without tangling responsibilities.
 - `SlackBot.Logging` attaches consistent metadata (`envelope_id`, `event_type`, `channel`, `user`) around handler execution.
 - `SlackBot.Telemetry` centralizes event naming so connection lifecycle, handler timings, diagnostics actions, etc. emit consistent metrics (ready for LiveDashboard or custom collectors).
 - `SlackBot.Diagnostics` provides per-instance ring buffer backed by ETS, capturing inbound/outbound frames with list/clear/replay APIs.
@@ -87,7 +87,7 @@ SlackBot.Supervisor
 - **Replay/simulation**: diagnostics ring buffer + `SlackBot.Diagnostics.replay/2` feed captured events back through the router for deterministic debugging.
 - **Telemetry & LiveDashboard**: `docs/telemetry_dashboard.md` explains how to hook the emitted events to LiveDashboard metrics or plain Telemetry handlers so teams can chart connection health without Phoenix dependencies baked into SlackBot.
 - **Examples**: `examples/basic_bot` demonstrates slash DSL grammars, middleware, diagnostics replay, and auto-ack in a runnable Mix project.
-- **Testing helpers**: `SlackBot.TestTransport` to assert ack timing, handler execution, and telemetry emission without live Slack connection.
+- **Testing helpers**: `SlackBot.TestTransport` and `SlackBot.TestHTTP` ship in `lib/slack_bot/testing/`, so downstream projects can simulate Socket Mode or stub Slack Web API calls without copying fixtures.
 
 ## Feature Parity Checklist
 - [x] WebSockex socket-mode client with `apps.connections.open` retries.
