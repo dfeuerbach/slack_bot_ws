@@ -1,27 +1,12 @@
-# SlackBot Assessment & Redesign
+# SlackBot Design & Goals
 
-## Reference: `Slack.Socket`
-- Websocket lifecycle via `WebSockex`, `apps.connections.open` acquisition, and exponential backoff with rate-limit awareness.  
-```
-21:155:/Users/dougf/dev/p/slack_bot_ws/ref/slack_elixir/lib/slack/socket.ex
-@impl WebSockex
-def handle_frame({:text, msg}, state) do
-  case Jason.decode(msg) do
-    {:ok, %{"payload" => %{"event" => event}} = msg} ->
-      Task.Supervisor.start_child(...)
-      {:reply, ack_frame(msg), state}
-  end
-end
-```
-- Immediate ack before heavy work, partitioned task supervision, and guardrails for self-generated events.
-- Channel cache mutations handled via `Slack.ChannelServer` when bot joins/leaves channels.
-- Gaps: no top-level config surface, no telemetry/logging hooks beyond raw Logger calls, no slash-command ergonomics, minimal caching, no middleware/testing/replay facilities, single-node assumption, no heartbeat monitoring visibility.
-
-## SlackBot Goals
-1. Match all robustness characteristics (fast ack, retries, channel cache, supervised handlers, self-event filters, ping/reconnect discipline).
-2. Provide a first-class `SlackBot` API with declarative configuration and handler DSL.
-3. Offer delightful developer experience: slash-command/chat parsing via NimbleParsec (always-on), optional BlockBox block builders, middleware, replay/testing, structured logging, and telemetry hooks.
-4. Support multi-node readiness via pluggable cache/event buffer adapters (ETS default, Redis/others via behaviour).
+## Goals
+- **Performance & Survivability** – Maintain Slack’s 15 s ping/pong discipline via WebSockex, acknowledge envelopes immediately, and restart transports with exponential backoff + jitter. Handler work is faned out through `Task.Supervisor` so slow commands never block the socket loop.
+- **Caching & State** – Provide bot-friendly snapshots of channels/users via the provider/mutation-queue pattern. The event buffer deduplicates envelopes and plugs into alternative backends (ETS by default, Redis or others via adapters) for multi-node deployments.
+- **Developer Experience** – Expose a declarative handler DSL (events + slash commands) powered by NimbleParsec so teams define deterministic grammars without writing parsers. Optional BlockBox helpers keep Block Kit payloads ergonomic while remaining opt-in.
+- **Observability & Telemetry** – Emit Telemetry events for connection lifecycle, handler spans, diagnostics record/replay, and rate limiting so Phoenix LiveDashboard (or any Telemetry consumer) can plot health metrics. Structured logging attaches envelope/channel metadata automatically.
+- **Diagnostics & Testing** – Ship a built-in diagnostics ring buffer with list/clear/replay APIs, plus a test transport and mock HTTP client so developers can write focused unit tests. Replay makes production issues reproducible locally.
+- **Extensibility & Deployment** – Treat configuration as data (`SlackBot.Config`), allowing runtime reloads, pluggable cache/event-buffer adapters, and multiple supervised instances inside the same BEAM node. All public modules carry `@doc` coverage for HexDocs.
 
 ## Public API & Configuration
 - `SlackBot.start_link/1`: accepts keyword list or `%SlackBot.Config{}` with:
