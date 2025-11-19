@@ -1,7 +1,10 @@
 defmodule SlackBot.Backoff do
   @moduledoc false
 
-  @spec next_delay(%{min_ms: pos_integer(), max_ms: pos_integer(), jitter_ratio: number()}, pos_integer()) ::
+  @spec next_delay(
+          %{min_ms: pos_integer(), max_ms: pos_integer(), jitter_ratio: number()},
+          pos_integer()
+        ) ::
           pos_integer()
   def next_delay(%{min_ms: min_ms, max_ms: max_ms} = backoff, attempt) when attempt >= 1 do
     base =
