@@ -78,6 +78,17 @@ defmodule SlackBot.ConfigTest do
       assert {:error, {:invalid_diagnostics_buffer, 0}} =
                Config.build(Keyword.put(@valid_opts, :diagnostics, buffer_size: 0))
     end
+
+    test "validates backoff jitter ratio" do
+      assert {:ok, %Config{backoff: %{jitter_ratio: 0.5}}} =
+               Config.build(Keyword.put(@valid_opts, :backoff, %{jitter_ratio: 0.5}))
+
+      assert {:error, {:invalid_backoff_jitter, -0.1}} =
+               Config.build(Keyword.put(@valid_opts, :backoff, %{jitter_ratio: -0.1}))
+
+      assert {:error, {:invalid_backoff_jitter, 2}} =
+               Config.build(Keyword.put(@valid_opts, :backoff, %{jitter_ratio: 2}))
+    end
   end
 
   describe "build!/1" do

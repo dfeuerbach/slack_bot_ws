@@ -28,7 +28,7 @@ defmodule SlackBot.Config do
     cache: {:ets, []},
     event_buffer: {:ets, []},
     block_builder: :none,
-    backoff: %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity},
+    backoff: %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity, jitter_ratio: 0.2},
     heartbeat_ms: 15_000,
     ping_timeout_ms: 5_000,
     ack_mode: :silent,
@@ -53,7 +53,8 @@ defmodule SlackBot.Config do
           backoff: %{
             min_ms: pos_integer(),
             max_ms: pos_integer(),
-            max_attempts: pos_integer() | :infinity
+            max_attempts: pos_integer() | :infinity,
+            jitter_ratio: number()
           },
           heartbeat_ms: pos_integer(),
           ping_timeout_ms: pos_integer(),
@@ -224,7 +225,7 @@ defmodule SlackBot.Config do
 
   defp fetch_backoff(opts) do
     backoff = Keyword.get(opts, :backoff, %{})
-    defaults = %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity}
+    defaults = %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity, jitter_ratio: 0.2}
 
     merged = Map.merge(defaults, Map.new(backoff))
 
@@ -237,6 +238,9 @@ defmodule SlackBot.Config do
 
       merged.max_attempts != :infinity and not positive?(merged.max_attempts) ->
         {:error, {:invalid_backoff_attempts, merged.max_attempts}}
+
+      not valid_jitter?(merged.jitter_ratio) ->
+        {:error, {:invalid_backoff_jitter, merged.jitter_ratio}}
 
       true ->
         {:ok, merged}
@@ -293,6 +297,9 @@ defmodule SlackBot.Config do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp valid_jitter?(value) when is_number(value), do: value >= 0 and value <= 1
+  defp valid_jitter?(_), do: false
 
   defp positive?(value) when is_integer(value) and value > 0, do: true
   defp positive?(_), do: false

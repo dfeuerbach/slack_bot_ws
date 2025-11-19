@@ -5,6 +5,7 @@ defmodule SlackBot.ConnectionManager do
 
   require Logger
 
+  alias SlackBot.Backoff
   alias SlackBot.Cache
   alias SlackBot.Config
   alias SlackBot.ConfigServer
@@ -309,9 +310,7 @@ defmodule SlackBot.ConnectionManager do
 
   defp backoff_delay(state) do
     attempt = max(state.attempt, 1)
-    min_ms = state.config.backoff.min_ms
-    max_ms = state.config.backoff.max_ms
-    trunc(min(max_ms, min_ms * :math.pow(2, attempt - 1)))
+    Backoff.next_delay(state.config.backoff, attempt)
   end
 
   defp now_ms, do: System.monotonic_time(:millisecond)
