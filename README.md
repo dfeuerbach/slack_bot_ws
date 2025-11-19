@@ -2,14 +2,14 @@
 
 ![SlackBot WS](docs/images/slackbot_ws_logo.png)
 
-SlackBot is a socket-mode client for building resilient Slack automations in Elixir. It focuses on fast acknowledgements, supervised event handling, NimbleParsec-powered command parsing, and a developer-friendly configuration surface.
+SlackBot is a socket-mode client for building resilient Slack automations in Elixir. It focuses on fast acknowledgements, supervised event handling, deterministic slash-command parsing, and a developer-friendly configuration surface.
 
 ## Highlights
 - Supervised WebSocket connection manager with rate-limit aware backoff and heartbeat monitoring
 - Task-based event fan-out with dedupe and replay safeguards
 - Declarative handler DSL for events, slash commands, shortcuts, and middleware
-- Slash-command grammar DSL compiled via NimbleParsec for deterministic parsing
-- Optional BlockBox integration for composing Block Kit payloads
+- Slash-command grammar DSL that produces deterministic, structured payloads
+- Optional BlockBox integration for composing Block Kit payloads (see [BlockBox docs](https://hexdocs.pm/blockbox/BlockBox.html))
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
 
@@ -142,7 +142,7 @@ Phoenix is not available.
 
 ## Slash Command Grammar
 
-The `slash/2` DSL converts structured declarations into NimbleParsec parsers. A few real-world examples:
+The `slash/2` DSL converts structured declarations into deterministic parsers (no manual string splitting required). A few real-world examples:
 
 | Slack Input | DSL snippet | Handler payload |
 | --- | --- | --- |
