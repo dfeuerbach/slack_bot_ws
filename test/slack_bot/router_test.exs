@@ -47,6 +47,30 @@ defmodule SlackBot.RouterTest do
     end
   end
 
+  defmodule MultiRouter do
+    use SlackBot
+
+    slash "/deploy" do
+      grammar do
+        value(:service)
+      end
+
+      handle payload, ctx do
+        send(ctx.assigns.test_pid, {:multi, :deploy, payload["parsed"]})
+      end
+    end
+
+    slash "/rollback" do
+      grammar do
+        value(:service)
+      end
+
+      handle payload, ctx do
+        send(ctx.assigns.test_pid, {:multi, :rollback, payload["parsed"]})
+      end
+    end
+  end
+
   test "dispatches message events" do
     ctx = ctx(DemoRouter)
     DemoRouter.handle_event("message", %{"text" => "hi"}, ctx)
@@ -203,6 +227,26 @@ defmodule SlackBot.RouterTest do
 
     assert_receive {:slash_ack_override, %{command: "deploy", service: "svc"}}
     refute_receive {:ack_invoked, _}
+  end
+
+  test "routes slash commands based on the normalized command literal" do
+    ctx = ctx(MultiRouter)
+
+    MultiRouter.handle_event(
+      "slash_commands",
+      %{"command" => "/deploy", "text" => "service-a"},
+      ctx
+    )
+
+    assert_receive {:multi, :deploy, %{command: "deploy", service: "service-a"}}
+
+    MultiRouter.handle_event(
+      "slash_commands",
+      %{"command" => "/rollback", "text" => "service-b"},
+      ctx
+    )
+
+    assert_receive {:multi, :rollback, %{command: "rollback", service: "service-b"}}
   end
 
   defp ctx(module, overrides \\ []) do

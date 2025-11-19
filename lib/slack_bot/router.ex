@@ -264,8 +264,8 @@ defmodule SlackBot.Router do
 
   defp match_handler?({:event, type, _}, type, _payload), do: true
 
-  defp match_handler?({:slash_dsl, _command, _fun, _grammar, _opts}, "slash_commands", payload) do
-    payload["command"] != nil
+  defp match_handler?({:slash_dsl, command, _fun, _grammar, _opts}, "slash_commands", payload) do
+    payload_command(payload) == command
   end
 
   defp match_handler?(_, _, _), do: false
