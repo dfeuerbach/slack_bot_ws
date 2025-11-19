@@ -33,7 +33,7 @@ defmodule SlackBot.SlashAck do
 
     result =
       try do
-        client.post(url, body)
+        client.post(url, body, config)
       rescue
         exception ->
           duration = System.monotonic_time() - start
@@ -42,7 +42,11 @@ defmodule SlackBot.SlashAck do
       else
         res ->
           duration = System.monotonic_time() - start
-          Telemetry.execute(config, [:ack, :http], %{duration: duration}, %{status: ack_status(res)})
+
+          Telemetry.execute(config, [:ack, :http], %{duration: duration}, %{
+            status: ack_status(res)
+          })
+
           res
       end
 

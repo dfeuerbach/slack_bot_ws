@@ -108,5 +108,5 @@ defmodule TestAckClient do
   @behaviour SlackBot.SlashAck.HttpClient
 
   @impl true
-  def post(_url, _body), do: :ok
+  def post(_url, _body, _config), do: :ok
 end

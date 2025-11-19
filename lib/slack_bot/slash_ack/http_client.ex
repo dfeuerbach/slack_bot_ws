@@ -6,5 +6,5 @@ defmodule SlackBot.SlashAck.HttpClient do
   need to control how response URLs are invoked during auto-ack flows.
   """
 
-  @callback post(String.t(), map()) :: :ok | {:error, term()}
+  @callback post(String.t(), map(), SlackBot.Config.t()) :: :ok | {:error, term()}
 end

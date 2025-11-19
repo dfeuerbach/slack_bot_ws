@@ -103,9 +103,24 @@ defmodule SlackBot do
     rescue
       exception ->
         duration = System.monotonic_time() - start
-        Telemetry.execute(config, [:api, :request], %{duration: duration}, %{method: method, status: :exception})
+
+        Telemetry.execute(config, [:api, :request], %{duration: duration}, %{
+          method: method,
+          status: :exception
+        })
+
         reraise exception, __STACKTRACE__
     end
+  end
+
+  @doc """
+  Sends a Web API request asynchronously using the runtime task supervisor.
+  """
+  @spec push_async(GenServer.server(), {String.t(), map()}) :: Task.t()
+  def push_async(server \\ __MODULE__, request) do
+    server
+    |> resolve_task_supervisor()
+    |> Task.Supervisor.async(fn -> push(server, request) end)
   end
 
   @doc """
@@ -139,6 +154,11 @@ defmodule SlackBot do
   defp resolve_connection_manager(server)
        when is_atom(server) or is_tuple(server) or is_pid(server) do
     resolve_child_name(server, :ConnectionManager)
+  end
+
+  defp resolve_task_supervisor(server)
+       when is_atom(server) or is_tuple(server) or is_pid(server) do
+    resolve_child_name(server, :TaskSupervisor)
   end
 
   defp resolve_child_name({:via, _, _} = via, _suffix), do: via

@@ -44,5 +44,13 @@ defmodule SlackBotTest do
 
     assert {:ok, %{"text" => "payload"}} =
              SlackBot.push(SlackBotTest.Supervisor, {"chat.postMessage", %{"text" => "payload"}})
+
+    task =
+      SlackBot.push_async(
+        SlackBotTest.Supervisor,
+        {"chat.postMessage", %{"text" => "async"}}
+      )
+
+    assert {:ok, %{"text" => "async"}} = Task.await(task)
   end
 end

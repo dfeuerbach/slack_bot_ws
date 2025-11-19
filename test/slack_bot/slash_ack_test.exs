@@ -7,7 +7,7 @@ defmodule SlackBot.SlashAckTest do
     @behaviour SlackBot.SlashAck.HttpClient
 
     @impl true
-    def post(url, body) do
+    def post(url, body, _config) do
       if pid = Process.get(:ack_test_pid) do
         send(pid, {:ack_post, url, body})
       end
