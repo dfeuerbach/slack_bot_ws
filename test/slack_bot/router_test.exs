@@ -8,6 +8,11 @@ defmodule SlackBot.RouterTest do
     def call(_type, payload, ctx), do: {:cont, payload, ctx}
   end
 
+  defmodule HaltMiddleware do
+    def call("message", payload, _ctx), do: {:halt, {:blocked, payload["text"]}}
+    def call(_type, payload, ctx), do: {:cont, payload, ctx}
+  end
+
   defmodule DemoRouter do
     use SlackBot
 
@@ -83,6 +88,20 @@ defmodule SlackBot.RouterTest do
     end
   end
 
+  defmodule HaltingRouter do
+    use SlackBot
+
+    middleware(HaltMiddleware)
+
+    handle_event "message", event, ctx do
+      send(ctx.assigns.test_pid, {:first_handler, event})
+    end
+
+    handle_event "message", event, ctx do
+      send(ctx.assigns.test_pid, {:second_handler, event})
+    end
+  end
+
   test "dispatches message events" do
     ctx = ctx(DemoRouter)
     DemoRouter.handle_event("message", %{"text" => "hi"}, ctx)
@@ -109,6 +128,16 @@ defmodule SlackBot.RouterTest do
 
     assert_receive {:multi_event, 1, %{"text" => "hi"}}
     assert_receive {:multi_event, 2, %{"text" => "hi"}}
+  end
+
+  test "halts middleware prevent downstream handlers" do
+    ctx = ctx(HaltingRouter)
+
+    assert {:halt, {:blocked, "hi"}} =
+             HaltingRouter.handle_event("message", %{"text" => "hi"}, ctx)
+
+    refute_receive {:first_handler, _}
+    refute_receive {:second_handler, _}
   end
 
   defmodule GrammarRouter do

@@ -108,20 +108,31 @@ SlackBot routes every non-slash event through a Plug-like pipeline:
 defmodule LayeredRouter do
   use SlackBot
 
-  # Log every inbound message
-  middleware fn "message", payload, ctx ->
-    Logger.debug("incoming=#{payload["text"]}")
-    {:cont, payload, ctx}
-  end
+  require Logger
 
-  # Stop the pipeline if this user is blocked
-  middleware fn "message", payload, ctx ->
-    if payload["user"] in ctx.assigns.blocked_users do
-      {:halt, {:error, :blocked}}
-    else
+  defmodule LogMiddleware do
+    def call("message", payload, ctx) do
+      Logger.debug("incoming=#{payload["text"]}")
       {:cont, payload, ctx}
     end
+
+    def call(_type, payload, ctx), do: {:cont, payload, ctx}
   end
+
+  defmodule BlocklistMiddleware do
+    def call("message", payload, ctx) do
+      if payload["user"] in ctx.assigns.blocked_users do
+        {:halt, {:error, :blocked}}
+      else
+        {:cont, payload, ctx}
+      end
+    end
+
+    def call(_type, payload, ctx), do: {:cont, payload, ctx}
+  end
+
+  middleware LogMiddleware
+  middleware BlocklistMiddleware
 
   handle_event "message", payload, ctx do
     Cache.record_message(ctx.assigns.tenant_id, payload)
@@ -133,7 +144,14 @@ defmodule LayeredRouter do
 end
 ```
 
-In this example the cache update and reply logic stay isolated, yet both run for each message. If the second middleware halts, neither handler executes—exactly like a Plug pipeline. Slash commands keep their single match semantics so only the grammar that owns `/cmd` fires.
+In this example the cache update and reply logic stay isolated, yet both run for each message.
+Because middleware runs before every handler, the block list can short-circuit the pipeline
+(`{:halt, ...}`) and stop every remaining handler. Slash commands keep their single match
+semantics so only the grammar that owns `/cmd` fires.
+
+Middleware modules can be defined inline (as above) or referenced as fully-qualified modules.
+Anonymous middleware is intentionally unsupported so the pipeline remains deterministic and
+introspectable.
 
 3. Supervise SlackBot alongside your application processes:
 

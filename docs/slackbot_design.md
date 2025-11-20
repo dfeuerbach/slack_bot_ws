@@ -78,6 +78,7 @@ SlackBot.Supervisor
 
 ### Middleware, Logging & Diagnostics
 - Middleware pipeline (Plug-like) wraps every dispatch; middlewares can mutate payload/context or halt the chain entirely (`{:halt, resp}`), and **every** `handle_event/3` defined for a given type runs in declaration order so you can layer cache updates, metrics, and business logic without tangling responsibilities.
+- Middleware entries are either modules implementing `call/3` or `{module, function}` tuples—anonymous middleware is intentionally disallowed so the pipeline remains introspectable.
 - `SlackBot.Logging` attaches consistent metadata (`envelope_id`, `event_type`, `channel`, `user`) around handler execution.
 - `SlackBot.Telemetry` centralizes event naming so connection lifecycle, handler timings, diagnostics actions, etc. emit consistent metrics (ready for LiveDashboard or custom collectors).
 - `SlackBot.Diagnostics` provides per-instance ring buffer backed by ETS, capturing inbound/outbound frames with list/clear/replay APIs.

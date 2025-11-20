@@ -207,8 +207,8 @@ defmodule SlackBot.Router do
   @doc """
   Registers middleware that will run before a handler.
 
-  Middleware can be an MFA tuple, a module implementing `call/3`, or an anonymous
-  function. Each middleware receives `{type, payload, ctx}` and must return either:
+  Middleware can be an MFA tuple or a module implementing `call/3`. Each middleware
+  receives `{type, payload, ctx}` and must return either:
 
     * `{:cont, payload, ctx}` to continue the pipeline
     * `{:halt, response}` to stop execution
@@ -217,6 +217,12 @@ defmodule SlackBot.Router do
     quote do
       @slackbot_middlewares unquote(fun)
     end
+  end
+
+  defmacro middleware(other) do
+    raise ArgumentError,
+          "SlackBot middleware must be a module or {module, function} tuple, got: " <>
+            Macro.to_string(other)
   end
 
   defmacro __before_compile__(env) do
@@ -262,10 +268,7 @@ defmodule SlackBot.Router do
       true ->
         handlers
         |> Enum.filter(&match_event?(&1, type))
-        |> Enum.reduce(:ok, fn {:event, _type, fun}, _acc ->
-          runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
-          run_middlewares(middlewares, type, payload, ctx, runner)
-        end)
+        |> run_event_handlers(module, middlewares, type, payload, ctx)
     end
   end
 
@@ -282,8 +285,19 @@ defmodule SlackBot.Router do
   defp match_event?({:event, type, _}, type), do: true
   defp match_event?(_, _), do: false
 
+  defp run_event_handlers([], _module, _middlewares, _type, _payload, _ctx), do: :ok
+
+  defp run_event_handlers([{:event, _type, fun} | rest], module, middlewares, type, payload, ctx) do
+    runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
+
+    case run_middlewares(middlewares, type, payload, ctx, runner) do
+      {:halt, response} -> {:halt, response}
+      {:cont, _result} -> run_event_handlers(rest, module, middlewares, type, payload, ctx)
+    end
+  end
+
   defp run_middlewares([], _type, payload, ctx, fun) do
-    fun.(payload, ctx)
+    {:cont, fun.(payload, ctx)}
   end
 
   defp run_middlewares([middleware | rest], type, payload, ctx, fun) do
@@ -292,7 +306,7 @@ defmodule SlackBot.Router do
         run_middlewares(rest, type, new_payload, new_ctx, fun)
 
       {:halt, response} ->
-        response
+        {:halt, response}
     end
   end
 
@@ -397,13 +411,16 @@ defmodule SlackBot.Router do
           ack_mode = resolve_ack_mode(opts, ctx)
           maybe_ack(ack_mode, payload, ctx)
 
-          run_middlewares(
-            middlewares,
-            "slash_commands",
-            Map.put(payload, "parsed", enriched),
-            ctx,
-            runner
-          )
+          case run_middlewares(
+                 middlewares,
+                 "slash_commands",
+                 Map.put(payload, "parsed", enriched),
+                 ctx,
+                 runner
+               ) do
+            {:halt, response} -> {:halt, response}
+            {:cont, result} -> result
+          end
         else
           {:error, reason} ->
             Logger.warning("[SlackBot] slash DSL parse error: #{inspect(reason)}")
