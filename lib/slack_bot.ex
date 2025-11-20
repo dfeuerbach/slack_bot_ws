@@ -70,16 +70,6 @@ defmodule SlackBot do
   end
 
   @doc """
-  Reloads configuration overrides at runtime.
-  """
-  @spec reload_config(keyword(), GenServer.server()) :: :ok | {:error, term()}
-  def reload_config(overrides, server \\ __MODULE__) when is_list(overrides) do
-    server
-    |> resolve_config_server()
-    |> ConfigServer.reload(overrides)
-  end
-
-  @doc """
   Sends a Web API request using the bot token.
   """
   @spec push(GenServer.server(), {String.t(), map()}) :: {:ok, map()} | {:error, term()}
@@ -89,7 +79,7 @@ defmodule SlackBot do
     start = System.monotonic_time()
 
     try do
-      result = config.http_client.post(method, config.bot_token, body)
+      result = config.http_client.post(config, method, body)
       duration = System.monotonic_time() - start
 
       Telemetry.execute(

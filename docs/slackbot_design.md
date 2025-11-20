@@ -6,7 +6,7 @@
 - **Developer Experience** – Expose a declarative handler DSL (events + slash commands) powered by NimbleParsec so teams define deterministic grammars without writing parsers. Optional BlockBox helpers keep Block Kit payloads ergonomic while remaining opt-in.
 - **Observability & Telemetry** – Emit Telemetry events for connection lifecycle, handler spans, diagnostics record/replay, and rate limiting so Phoenix LiveDashboard (or any Telemetry consumer) can plot health metrics. Structured logging attaches envelope/channel metadata automatically.
 - **Diagnostics & Testing** – Ship a built-in diagnostics ring buffer with list/clear/replay APIs, plus a test transport and mock HTTP client so developers can write focused unit tests. Replay makes production issues reproducible locally.
-- **Extensibility & Deployment** – Treat configuration as data (`SlackBot.Config`), allowing runtime reloads, pluggable cache/event-buffer adapters, and multiple supervised instances inside the same BEAM node. All public modules carry `@doc` coverage for HexDocs.
+- **Extensibility & Deployment** – Treat configuration as data (`SlackBot.Config`), enabling pluggable cache/event-buffer adapters and multiple supervised instances inside the same BEAM node. All public modules carry `@doc` coverage for HexDocs.
 
 ## Public API & Configuration
 - `SlackBot.start_link/1`: accepts keyword list or `%SlackBot.Config{}` with:
@@ -22,6 +22,9 @@
   - `SlackBot.push(bot, request)` – convenience wrappers around Slack Web API (backed by Req/Finch).
   - `SlackBot.emit(bot, event)` – inject synthetic events (testing/scheduled jobs).
   - `SlackBot.test_transport/1` – instrumentation-friendly fake transport for unit tests.
+
+> Configuration is immutable after boot. Update the application environment and
+> restart the `SlackBot` supervisor (or your enclosing app) to apply changes.
 
 ## Internal Architecture
 ```

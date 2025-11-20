@@ -11,9 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Supervised WebSockex connection manager with immediate envelope ACKs and Task.Supervisor fan-out so handlers never block the socket loop.
 - Event buffer dedupe with ETS-backed default and adapters, plus jittered exponential backoff to stagger reconnect attempts across nodes.
 - Fast, deterministic slash command routing for predictable dispatch.
+- Dedicated Finch pool for Slack Web API traffic (`api_pool_opts`) so Req calls reuse warm connections and can be tuned per bot.
 
 ### Robustness & Resiliency
-- Runtime `SlackBot.ConfigServer` that validates config, supports hot reloads, and fans out immutable `%SlackBot.Config{}` structs to every process.
+- Runtime `SlackBot.ConfigServer` that validates config and fans out immutable `%SlackBot.Config{}` structs to every process.
 - Provider/mutation-queue cache pattern for channels/users with automatic updates on join/leave/user-change events.
 - Heartbeat monitoring, ping/pong responses, and rate-limit-aware reconnects that respect Slack’s expected disconnect/reconnect lifecycle.
 

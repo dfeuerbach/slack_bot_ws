@@ -22,23 +22,4 @@ defmodule SlackBot.ConfigServerTest do
   test "returns config via call", %{server: server} do
     assert %SlackBot.Config{app_token: "xapp-789"} = ConfigServer.config(server)
   end
-
-  test "reload/2 swaps configuration when valid", %{server: server} do
-    assert :ok = ConfigServer.reload([app_token: "new-app"], server)
-
-    assert %SlackBot.Config{app_token: "new-app"} = ConfigServer.config(server)
-  end
-
-  test "reload/2 merges overrides with existing config", %{server: server} do
-    assert :ok = ConfigServer.reload([assigns: %{foo: :bar}], server)
-
-    assert %SlackBot.Config{assigns: %{foo: :bar}} = ConfigServer.config(server)
-  end
-
-  test "reload/2 rejects invalid overrides", %{server: server} do
-    assert {:error, {:invalid_bot_token, ""}} =
-             ConfigServer.reload([bot_token: ""], server)
-
-    assert %SlackBot.Config{app_token: "xapp-789"} = ConfigServer.config(server)
-  end
 end

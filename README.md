@@ -49,6 +49,10 @@ config :slack_bot_ws, SlackBot,
   assigns: %{bot_user_id: System.get_env("SLACK_BOT_USER_ID")}
 ```
 
+> Configuration changes take effect after the `SlackBot` supervisor is restarted.
+> Update your config and then restart the supervised bot (for example by
+> restarting your application or the specific supervisor branch).
+
 2. Use the handler DSL to declare events and slash commands:
 
 ```elixir

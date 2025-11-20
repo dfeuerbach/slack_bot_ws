@@ -69,7 +69,7 @@ iex> SlackBot.Diagnostics.replay(MyBot.SlackBot, types: ["slash_commands"])
 
 ### Example Debugging Workflow
 
-1. Enable diagnostics in production (or temporarily via `SlackBot.reload_config/2`).
+1. Enable diagnostics in production and deploy/restart the bot so the new config takes effect.
 2. When an incident occurs, open a remote IEx session:
    ```elixir
    :rpc.call(node, SlackBot.Diagnostics, :list, [MyBot.SlackBot, [types: ["slash_commands"]]])
