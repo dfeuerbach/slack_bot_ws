@@ -24,6 +24,8 @@ defmodule SlackBot.RuntimeSupervisor do
     task_supervisor_name = Module.concat(base_name, :TaskSupervisor)
     connection_manager_name = Module.concat(base_name, :ConnectionManager)
     ack_pool_name = Module.concat(base_name, :AckFinch)
+    api_pool_name = Module.concat(base_name, :APIFinch)
+    api_pool_opts = Keyword.put(config.api_pool_opts, :name, api_pool_name)
 
     children =
       []
@@ -32,6 +34,7 @@ defmodule SlackBot.RuntimeSupervisor do
       |> Kernel.++([SlackBot.Diagnostics.child_spec(config)])
       |> Kernel.++([
         {Finch, name: ack_pool_name},
+        {Finch, api_pool_opts},
         %{
           id: task_supervisor_name,
           start: {Task.Supervisor, :start_link, [[name: task_supervisor_name]]},

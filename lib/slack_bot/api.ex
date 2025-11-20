@@ -3,12 +3,14 @@ defmodule SlackBot.API do
 
   @slack_base "https://slack.com/api/"
 
-  @spec apps_connections_open(String.t()) ::
+  alias SlackBot.Config
+
+  @spec apps_connections_open(Config.t()) ::
           {:ok, String.t()}
           | {:rate_limited, non_neg_integer()}
           | {:error, term()}
-  def apps_connections_open(app_token) do
-    case post("apps.connections.open", app_token, %{}) do
+  def apps_connections_open(%Config{} = config) do
+    case post_with_token(config, config.app_token, "apps.connections.open", %{}) do
       {:ok, %{"url" => url}} ->
         {:ok, url}
 
@@ -20,11 +22,15 @@ defmodule SlackBot.API do
     end
   end
 
-  @spec post(String.t(), String.t(), map()) ::
+  @spec post(Config.t(), String.t(), map()) ::
           {:ok, map()}
           | {:error, {:rate_limited, non_neg_integer()}}
           | {:error, term()}
-  def post(method, token, body) when is_binary(method) do
+  def post(%Config{} = config, method, body) when is_binary(method) and is_map(body) do
+    post_with_token(config, config.bot_token, method, body)
+  end
+
+  defp post_with_token(%Config{} = config, token, method, body) when is_binary(method) do
     headers = [
       {"authorization", "Bearer #{token}"},
       {"content-type", "application/json"}
@@ -34,7 +40,8 @@ defmodule SlackBot.API do
            Req.post(
              url: @slack_base <> method,
              headers: headers,
-             json: body
+             json: body,
+             finch: finch_name(config)
            ),
          {:ok, decoded} <- decode_body(response) do
       interpret_response(decoded, response)
@@ -61,6 +68,10 @@ defmodule SlackBot.API do
     do: {:error, {:slack_error, error}}
 
   defp interpret_response(other, _response), do: {:error, {:invalid_body, other}}
+
+  defp finch_name(%Config{instance_name: instance}) when is_atom(instance) do
+    Module.concat(instance, :APIFinch)
+  end
 
   defp to_integer(nil, default), do: default
   defp to_integer(value, _default) when is_binary(value), do: String.to_integer(value)

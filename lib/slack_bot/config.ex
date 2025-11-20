@@ -33,6 +33,7 @@ defmodule SlackBot.Config do
     ping_timeout_ms: 5_000,
     ack_mode: :silent,
     ack_client: AckHTTP,
+    api_pool_opts: [],
     diagnostics: %{enabled: false, buffer_size: 200},
     log_level: :info
   ]
@@ -60,6 +61,7 @@ defmodule SlackBot.Config do
           ping_timeout_ms: pos_integer(),
           ack_mode: :silent | :ephemeral | {:custom, (map(), t() -> any())},
           ack_client: module(),
+          api_pool_opts: keyword(),
           diagnostics: %{
             enabled: boolean(),
             buffer_size: pos_integer()
@@ -128,6 +130,7 @@ defmodule SlackBot.Config do
          {:ok, ping_timeout_ms} <- fetch_positive(opts, :ping_timeout_ms),
          {:ok, ack_mode} <- fetch_ack_mode(opts),
          {:ok, ack_client} <- fetch_module_option(opts, :ack_client, AckHTTP),
+         {:ok, api_pool_opts} <- fetch_keyword(opts, :api_pool_opts, []),
          {:ok, diagnostics} <- fetch_diagnostics(opts),
          {:ok, log_level} <- fetch_log_level(opts) do
       {:ok,
@@ -144,6 +147,7 @@ defmodule SlackBot.Config do
          ping_timeout_ms: ping_timeout_ms,
          ack_mode: ack_mode,
          ack_client: ack_client,
+         api_pool_opts: api_pool_opts,
          diagnostics: diagnostics,
          log_level: log_level,
          transport: transport,

@@ -112,21 +112,21 @@ defmodule LayeredRouter do
 
   defmodule LogMiddleware do
     def call("message", payload, ctx) do
-      Logger.debug("incoming=#{payload["text"]}")
-      {:cont, payload, ctx}
-    end
+    Logger.debug("incoming=#{payload["text"]}")
+    {:cont, payload, ctx}
+  end
 
     def call(_type, payload, ctx), do: {:cont, payload, ctx}
   end
 
   defmodule BlocklistMiddleware do
     def call("message", payload, ctx) do
-      if payload["user"] in ctx.assigns.blocked_users do
-        {:halt, {:error, :blocked}}
-      else
-        {:cont, payload, ctx}
-      end
+    if payload["user"] in ctx.assigns.blocked_users do
+      {:halt, {:error, :blocked}}
+    else
+      {:cont, payload, ctx}
     end
+  end
 
     def call(_type, payload, ctx), do: {:cont, payload, ctx}
   end
@@ -202,6 +202,21 @@ uses a path dependency pointing at this repo).
 
 - `SlackBot.push/2` remains synchronous when you want to await the response.
 - `SlackBot.push_async/2` runs requests under the managed `Task.Supervisor`, keeping handlers responsive while telemetry + retries still flow through the same pipeline.
+
+SlackBot supervises a dedicated Finch pool (named `MyBot.SlackBot.APIFinch`) for all Slack Web
+API requests issued through `SlackBot.push/2`. Tune the pool using `:api_pool_opts`:
+
+```elixir
+config :slack_bot_ws, SlackBot,
+  api_pool_opts: [
+    pools: %{
+      default: [size: 20, count: 2]
+    }
+  ]
+```
+
+Increase `size`/`count` for burstier workloads, or lower them when you have a single bot with
+modest Web API traffic.
 
 ## Diagnostics & Replay
 

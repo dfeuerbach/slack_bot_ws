@@ -89,6 +89,14 @@ defmodule SlackBot.ConfigTest do
       assert {:error, {:invalid_backoff_jitter, 2}} =
                Config.build(Keyword.put(@valid_opts, :backoff, %{jitter_ratio: 2}))
     end
+
+    test "accepts api_pool_opts keyword list" do
+      opts = Keyword.put(@valid_opts, :api_pool_opts, pools: %{default: [size: 20]})
+      assert {:ok, %Config{api_pool_opts: [pools: %{default: [size: 20]}]}} = Config.build(opts)
+
+      assert {:error, {:invalid_keyword_option, :api_pool_opts, :invalid}} =
+               Config.build(Keyword.put(@valid_opts, :api_pool_opts, :invalid))
+    end
   end
 
   describe "build!/1" do

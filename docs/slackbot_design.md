@@ -14,6 +14,7 @@
   - connection opts: `backoff: {min_ms, max_ms, max_attempts}`, `heartbeat_ms`, `ping_timeout_ms`, `log_level`, `telemetry_prefix`
   - handler DSL macros: `handle_event/3`, `slash/2`, `middleware/1`
   - slash command ack strategy: `:silent` (default), `:ephemeral`, `{:custom, fun}` with per-command override
+  - Web API pooling: `api_pool_opts` (forwarded to Finch; defaults to `name: <instance>.APIFinch`)
   - cache adapter spec: `cache: {:ets, opts} | {:adapter, module, opts}`
   - event buffer adapter spec: `event_buffer: {:ets, opts} | {:adapter, module, opts}`
   - diagnostics toggle: `diagnostics: [enabled: boolean(), buffer_size: pos_integer()]`
@@ -44,6 +45,7 @@ SlackBot.Supervisor
 - Mirrors `Slack.Socket` backoff logic; parametrized jitter and max attempts.
 - Tracks Slack 15s ping/pong expectations; emits telemetry + triggers reconnect when heartbeats lapse.
 - Immediately decodes envelopes, delegates to `SlackBot.EventBuffer` for dedupe bookkeeping, then spawns handler task and acks right away.
+- Web API helpers reuse a per-instance Finch pool (`api_pool_opts`) so Req requests keep warm connections without starving slash-ack traffic (which uses a separate pool).
 
 ### Event Buffer & Caching
 - `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks: `insert(envelope_id)`, `seen?(envelope_id)`, `delete(envelope_id)`, `fetch_pending/0`.

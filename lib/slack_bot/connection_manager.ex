@@ -154,7 +154,7 @@ defmodule SlackBot.ConnectionManager do
     config = ConfigServer.config(state.config_server)
     state = %{state | config: config}
 
-    case config.http_client.apps_connections_open(config.app_token) do
+    case config.http_client.apps_connections_open(config) do
       {:ok, url} ->
         start_transport(url, state)
 

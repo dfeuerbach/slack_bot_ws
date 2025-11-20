@@ -5,7 +5,7 @@ defmodule SlackBot.TestHTTP do
   Provides deterministic responses for Slack Web API calls invoked via `SlackBot.push/2`.
   """
 
-  def apps_connections_open(_app_token), do: {:ok, "wss://test.example/socket"}
+  def apps_connections_open(_config), do: {:ok, "wss://test.example/socket"}
 
-  def post(_method, _token, body), do: {:ok, body}
+  def post(_config, _method, body), do: {:ok, body}
 end
