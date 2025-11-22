@@ -10,7 +10,7 @@ SlackBot is a socket-mode client for building resilient Slack automations in Eli
 - Pluggable cache/event buffer adapters (ETS by default, Redis adapter included for multi-node dedupe)
 - Declarative handler DSL for events, slash commands, shortcuts, and middleware
 - Slash-command grammar DSL that produces deterministic, structured payloads
-- Native routing for Slack interactivity payloads (global & message shortcuts, block actions, modal submissions)
+- Native routing for Slack interactivity payloads (global/message shortcuts, message actions, workflow steps, block suggestions, modal submissions)
 - Optional BlockBox integration for composing Block Kit payloads (see [BlockBox docs](https://hexdocs.pm/blockbox/BlockBox.html))
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
@@ -87,7 +87,7 @@ end
 > Existing bots using `handle_slash/3` still work. `payload["parsed"].args` now contains
 > the tokenized arguments for those handlers, while the DSL produces structured maps.
 
-Interactive payloads (global shortcuts, message shortcuts, block actions, modal submissions) are delivered to the router using their native Slack type. Use the regular `handle_event/3` macro or pattern match on the payload:
+Interactive payloads (global shortcuts, message shortcuts, block actions, message actions, workflow step events, block suggestions, modal submissions) are delivered to the router using their native Slack type. Use the regular `handle_event/3` macro or pattern match on the payload:
 
 ```elixir
 handle_event "shortcut", payload, ctx do

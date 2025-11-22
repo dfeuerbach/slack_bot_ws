@@ -48,9 +48,9 @@ SlackBot.Supervisor
 - Web API helpers reuse a per-instance Finch pool (`api_pool_opts`) so Req requests keep warm connections without starving slash-ack traffic (which uses a separate pool).
 
 ### Event Buffer & Caching
-- `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks: `insert(envelope_id)`, `seen?(envelope_id)`, `delete(envelope_id)`, `fetch_pending/0`.
+- `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks now center on `record(key, payload) :: {:ok | :duplicate, state}`, `delete/2`, `seen?/2`, and `pending/1`, letting the connection manager dedupe envelopes in a single RPC.
 - Redis adapter ships with the toolkit (powered by `Redix`) so envelope dedupe/replay can be shared across nodes without additional plumbing.
-- `SlackBot.Cache` now exposes an adapter behaviour as well; the default ETS provider/mutation queue remains available, but you can plug Redis or any datastore while benefiting from the same public API. Set `mode: :async` inside the adapter opts when you want cache writes to be fire-and-forget.
+- `SlackBot.Cache` exposes an adapter behaviour with `channels/2`, `users/2`, `metadata/2`, and `mutate/3`; the default ETS provider/mutation queue remains available, but you can plug Redis or any datastore while benefiting from the same public API. Set `mode: :async` inside the adapter opts when you want cache writes to be fire-and-forget.
 
 ### Command Router & Parsing
 - NimbleParsec baked in (non-optional). Default combinators handle:
