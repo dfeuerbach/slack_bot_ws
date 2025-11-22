@@ -32,6 +32,10 @@ defmodule SlackBot.CacheTest do
       Agent.get(table_name(instance), & &1.users)
     end
 
+    def metadata(%SlackBot.Config{instance_name: instance}, _opts) do
+      Agent.get(table_name(instance), & &1.metadata)
+    end
+
     def mutate(%SlackBot.Config{instance_name: instance}, _opts, op) do
       Agent.update(table_name(instance), &apply_op(&1, op))
     end
@@ -87,6 +91,7 @@ defmodule SlackBot.CacheTest do
     Cache.put_metadata(config, %{"team_id" => "T1"})
 
     assert %{"U1" => %{"id" => "U1"}} = Cache.users(config)
+    assert %{"team_id" => "T1"} = Cache.metadata(config)
   end
 
   test "supports custom adapters" do

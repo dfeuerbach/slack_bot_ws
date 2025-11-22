@@ -11,5 +11,6 @@ defmodule SlackBot.Cache.Adapter do
   @callback child_specs(Config.t(), keyword()) :: [Supervisor.child_spec()]
   @callback channels(Config.t(), keyword()) :: [String.t()]
   @callback users(Config.t(), keyword()) :: map()
+  @callback metadata(Config.t(), keyword()) :: map()
   @callback mutate(Config.t(), keyword(), SlackBot.Cache.cache_op()) :: :ok
 end

@@ -41,6 +41,13 @@ defmodule SlackBot.Cache.Adapters.ETS do
   end
 
   @impl true
+  def metadata(%Config{instance_name: instance}, _opts) do
+    instance
+    |> provider_name()
+    |> GenServer.call(:metadata)
+  end
+
+  @impl true
   def mutate(%Config{instance_name: instance}, opts, op) do
     queue = mutation_name(instance)
 

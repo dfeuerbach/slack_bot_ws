@@ -46,6 +46,15 @@ defmodule SlackBot.Cache do
   end
 
   @doc """
+  Returns the cached metadata map merged via `put_metadata/2`.
+  """
+  @spec metadata(SlackBot.Config.t() | GenServer.server()) :: map()
+  def metadata(config_or_name) do
+    {config, adapter, opts} = resolve(config_or_name)
+    adapter.metadata(config, opts)
+  end
+
+  @doc """
   Marks the bot as having joined the given `channel`.
   """
   @spec join_channel(SlackBot.Config.t(), String.t()) :: :ok
@@ -71,6 +80,8 @@ defmodule SlackBot.Cache do
 
   @doc """
   Merges arbitrary metadata (team info, workspace settings, etc.) into the cache.
+
+  Use `metadata/1` to read the merged map back.
   """
   @spec put_metadata(SlackBot.Config.t(), map()) :: :ok
   def put_metadata(config, metadata) when is_map(metadata) do

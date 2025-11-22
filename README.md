@@ -167,7 +167,7 @@ children = [
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
-Use `SlackBot.Cache.channels/1` and `SlackBot.Cache.users/1` to inspect cached metadata maintained by the runtime provider/mutation queue pair.
+Use `SlackBot.Cache.channels/1`, `SlackBot.Cache.users/1`, and `SlackBot.Cache.metadata/1` to inspect cached state maintained by the runtime provider/mutation queue pair.
 
 ## Adapters & Multi-node Deployments
 
@@ -225,6 +225,10 @@ Enable diagnostics in your config to keep a rolling buffer of inbound/outbound f
 ```elixir
 config :slack_bot_ws, SlackBot, diagnostics: [enabled: true, buffer_size: 300]
 ```
+
+> Diagnostics buffers store full Slack payloads (including user text). Enable them only in
+> environments where retaining that data is acceptable, and clear the buffer when you no
+> longer need the captured events.
 
 From `iex -S mix`, you can inspect or replay traffic without waiting for Slack to resend:
 

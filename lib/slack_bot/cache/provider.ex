@@ -28,6 +28,10 @@ defmodule SlackBot.Cache.Provider do
     {:reply, state.users, state}
   end
 
+  def handle_call(:metadata, _from, state) do
+    {:reply, state.metadata, state}
+  end
+
   @impl true
   def handle_call({:mutate, op}, _from, state) do
     {:reply, :ok, apply_op(state, op)}
