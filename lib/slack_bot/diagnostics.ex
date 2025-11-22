@@ -5,6 +5,10 @@ defmodule SlackBot.Diagnostics do
   Configure via `%SlackBot.Config{diagnostics: [enabled: true, buffer_size: 200]}`.
   When enabled, SlackBot records inbound/outbound frames so you can inspect or replay
   recent traffic from an IEx session.
+
+  > **Security note:** diagnostics entries contain the raw Slack payloads. Enable the buffer
+  > only in environments where retaining that data is acceptable, and remember to clear or
+  > scrub the buffer when working with sensitive workspaces.
   """
 
   alias SlackBot.Config

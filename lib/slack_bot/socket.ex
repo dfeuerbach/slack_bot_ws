@@ -7,7 +7,17 @@ defmodule SlackBot.Socket do
 
   alias SlackBot.Diagnostics
 
-  @interactive_types ~w(shortcut block_actions view_submission view_closed)
+  # Slack delivers several interactive payload types outside of the Events API.
+  @interactive_types ~w(
+    shortcut
+    block_actions
+    message_action
+    workflow_step_edit
+    workflow_step_execute
+    block_suggestion
+    view_submission
+    view_closed
+  )
 
   def start_link(url, opts) do
     manager = Keyword.fetch!(opts, :manager)

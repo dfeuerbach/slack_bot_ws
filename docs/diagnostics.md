@@ -4,6 +4,10 @@ SlackBot ships with first-class diagnostics so you can inspect and replay recent
 Socket Mode activity without begging Slack to resend events. Enable diagnostics in
 your runtime config and use the APIs below from `iex`, remote consoles, or tests.
 
+> **Security note:** diagnostics entries preserve the full Slack payload, including user-
+> generated content. Enable the buffer only when you can safely retain that data, and clear
+> it once you’re done inspecting or replaying events.
+
 ## Enabling Diagnostics
 
 ```elixir
