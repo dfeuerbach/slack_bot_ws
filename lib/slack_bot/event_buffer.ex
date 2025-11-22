@@ -21,12 +21,12 @@ defmodule SlackBot.EventBuffer do
     }
   end
 
-  @spec record(SlackBot.Config.t(), String.t() | nil, map()) :: :ok
+  @spec record(SlackBot.Config.t(), String.t() | nil, map()) :: :ok | :duplicate
   def record(%{instance_name: _instance}, nil, _payload), do: :ok
 
   def record(%{instance_name: instance}, key, payload) do
     server_name(instance)
-    |> GenServer.cast({:record, key, payload})
+    |> GenServer.call({:record, key, payload})
   end
 
   @spec delete(SlackBot.Config.t(), String.t() | nil) :: :ok

@@ -19,8 +19,15 @@ defmodule SlackBot.EventBuffer.Adapters.ETS do
   @impl true
   def record(state, key, payload) do
     clean_expired(state)
-    :ets.insert(state.table, {key, %{payload: payload, recorded_at: now_ms()}})
-    {:ok, state}
+
+    entry = %{payload: payload, recorded_at: now_ms()}
+
+    if :ets.insert_new(state.table, {key, entry}) do
+      {:ok, state}
+    else
+      :ets.insert(state.table, {key, entry})
+      {:duplicate, state}
+    end
   end
 
   @impl true

@@ -235,25 +235,25 @@ defmodule SlackBot.ConnectionManager do
   defp dispatch_event(type, payload, envelope, state) do
     key = envelope_id(envelope)
 
-    if key && EventBuffer.seen?(state.config, key) do
-      Logger.debug("[SlackBot] duplicate envelope #{key}, skipping")
-      {:noreply, state}
-    else
-      EventBuffer.record(state.config, key, envelope)
+    case EventBuffer.record(state.config, key, envelope) do
+      :duplicate when not is_nil(key) ->
+        Logger.debug("[SlackBot] duplicate envelope #{key}, skipping")
+        {:noreply, state}
 
-      Diagnostics.record(state.config, :inbound, %{
-        type: type,
-        payload: payload,
-        meta: %{envelope_id: key, envelope: envelope}
-      })
+      _ ->
+        Diagnostics.record(state.config, :inbound, %{
+          type: type,
+          payload: payload,
+          meta: %{envelope_id: key, envelope: envelope}
+        })
 
-      maybe_update_cache(type, payload, state.config)
+        maybe_update_cache(type, payload, state.config)
 
-      Task.Supervisor.start_child(state.task_supervisor, fn ->
-        invoke_handler(state.config, type, payload, envelope)
-      end)
+        Task.Supervisor.start_child(state.task_supervisor, fn ->
+          invoke_handler(state.config, type, payload, envelope)
+        end)
 
-      {:noreply, %{state | last_activity: now_ms()}}
+        {:noreply, %{state | last_activity: now_ms()}}
     end
   end
 

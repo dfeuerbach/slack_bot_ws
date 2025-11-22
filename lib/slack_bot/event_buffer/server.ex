@@ -18,14 +18,13 @@ defmodule SlackBot.EventBuffer.Server do
   end
 
   @impl true
-  def handle_cast({:record, key, payload}, %{adapter: adapter, state: adapter_state} = state) do
-    {:ok, new_state} = adapter.record(adapter_state, key, payload)
-    {:noreply, %{state | state: new_state}}
-  end
-
-  def handle_cast({:delete, key}, %{adapter: adapter, state: adapter_state} = state) do
-    {:ok, new_state} = adapter.delete(adapter_state, key)
-    {:noreply, %{state | state: new_state}}
+  def handle_call(
+        {:record, key, payload},
+        _from,
+        %{adapter: adapter, state: adapter_state} = state
+      ) do
+    {status, new_state} = adapter.record(adapter_state, key, payload)
+    {:reply, status, %{state | state: new_state}}
   end
 
   @impl true
@@ -34,8 +33,15 @@ defmodule SlackBot.EventBuffer.Server do
     {:reply, value, %{state | state: new_state}}
   end
 
+  @impl true
   def handle_call(:pending, _from, %{adapter: adapter, state: adapter_state} = state) do
     {value, new_state} = adapter.pending(adapter_state)
     {:reply, value, %{state | state: new_state}}
+  end
+
+  @impl true
+  def handle_cast({:delete, key}, %{adapter: adapter, state: adapter_state} = state) do
+    {:ok, new_state} = adapter.delete(adapter_state, key)
+    {:noreply, %{state | state: new_state}}
   end
 end

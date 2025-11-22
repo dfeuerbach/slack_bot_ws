@@ -11,7 +11,14 @@ defmodule SlackBot.EventBufferTest do
     end
 
     def record(state, key, payload) do
-      {:ok, %{state | entries: Map.put(state.entries, key, payload)}}
+      status =
+        if Map.has_key?(state.entries, key) do
+          :duplicate
+        else
+          :ok
+        end
+
+      {status, %{state | entries: Map.put(state.entries, key, payload)}}
     end
 
     def delete(state, key) do
@@ -43,12 +50,12 @@ defmodule SlackBot.EventBufferTest do
     %{config: config}
   end
 
-  test "records and detects envelopes", %{config: config} do
-    refute EventBuffer.seen?(config, "E1")
-    EventBuffer.record(config, "E1", %{payload: "value"})
+  test "records envelopes once and flags duplicates", %{config: config} do
+    assert :ok = EventBuffer.record(config, "E1", %{payload: "value"})
+    assert :duplicate = EventBuffer.record(config, "E1", %{payload: "value"})
     assert EventBuffer.seen?(config, "E1")
 
-    EventBuffer.delete(config, "E1")
+    assert :ok = EventBuffer.delete(config, "E1")
     refute EventBuffer.seen?(config, "E1")
   end
 
@@ -72,9 +79,8 @@ defmodule SlackBot.EventBufferTest do
 
     start_supervised!(EventBuffer.child_spec(config))
 
-    refute EventBuffer.seen?(config, "E5")
-    EventBuffer.record(config, "E5", %{payload: :ok})
-    assert EventBuffer.seen?(config, "E5")
+    assert :ok = EventBuffer.record(config, "E5", %{payload: :ok})
+    assert :duplicate = EventBuffer.record(config, "E5", %{payload: :ok})
     assert [%{payload: :ok}] = EventBuffer.pending(config)
   end
 end

@@ -49,14 +49,27 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
   def record(state, key, payload) do
     encoded = :erlang.term_to_binary(%{payload: payload, recorded_at: now_ms()})
     entry_key = entry_key(state, key)
+    ttl_arg = Integer.to_string(state.ttl_ms)
+    now = now_ms()
 
-    pipeline!(state, [
-      ["SET", entry_key, encoded, "PX", Integer.to_string(state.ttl_ms)],
-      ["ZADD", pending_key(state), now_ms(), entry_key],
-      ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now_ms() - state.ttl_ms]
-    ])
+    case command!(state, ["SET", entry_key, encoded, "PX", ttl_arg, "NX"]) do
+      {:ok, "OK"} ->
+        pipeline!(state, [
+          ["ZADD", pending_key(state), now, entry_key],
+          ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now - state.ttl_ms]
+        ])
 
-    {:ok, state}
+        {:ok, state}
+
+      {:ok, nil} ->
+        pipeline!(state, [
+          ["PEXPIRE", entry_key, ttl_arg],
+          ["ZADD", pending_key(state), now, entry_key],
+          ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now - state.ttl_ms]
+        ])
+
+        {:duplicate, state}
+    end
   end
 
   @impl true
