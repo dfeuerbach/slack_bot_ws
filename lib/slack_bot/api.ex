@@ -37,7 +37,7 @@ defmodule SlackBot.API do
     ]
 
     with {:ok, response} <-
-           Req.post(
+           request(
              url: @slack_base <> method,
              headers: headers,
              json: body,
@@ -71,6 +71,16 @@ defmodule SlackBot.API do
 
   defp finch_name(%Config{instance_name: instance}) when is_atom(instance) do
     Module.concat(instance, :APIFinch)
+  end
+
+  defp request(opts) when is_list(opts) do
+    req_module()
+    |> apply(:post, [opts])
+  end
+
+  defp req_module do
+    Application.get_env(:slack_bot_ws, __MODULE__, [])
+    |> Keyword.get(:req_impl, Req)
   end
 
   defp to_integer(nil, default), do: default
