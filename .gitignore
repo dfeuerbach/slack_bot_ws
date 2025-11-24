@@ -9,6 +9,9 @@ examples/**/_build/
 /deps/
 examples/**/deps/
 
+# Example project lockfiles
+examples/**/mix.lock
+
 # Where third-party dependencies like ExDoc output generated docs.
 /doc/
 
