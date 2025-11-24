@@ -6,7 +6,8 @@ This sample Mix project shows how to wire SlackBot into an OTP application with:
 - the slash command grammar DSL with optional/repeat segments,
 - diagnostics capture/replay,
 - auto-ack strategies (`:ephemeral` + `{:custom, fun}`),
-- optional BlockBox helpers (falls back to map builders if not installed).
+- optional BlockBox helpers (falls back to map builders if not installed),
+- explicit ephemeral messaging and async Web API usage.
 
 ## Prerequisites
 
@@ -42,6 +43,17 @@ The example uses the same `otp_app` pattern as the main README:
 
 - `/demo list short fleet tag alpha tag beta`
 - `/demo report platform`
+- `/demo blocks`
+- `/demo ping-ephemeral`
+- `/demo async-demo`
+
+When the bot is in a channel:
+
+- Mention it with `@basic-bot` (or your app's bot handle) to get a quick help message.
+- Run `/demo blocks` to see a Block Kit message; if BlockBox is installed and configured, it
+  will use BlockBox to build the blocks, otherwise it falls back to map helpers.
+- Run `/demo ping-ephemeral` to see an ephemeral message that only you can see.
+- Run `/demo async-demo` to see a short series of async messages followed by a final summary.
 
 The bot also replies to `@mention` events with instructions.
 
