@@ -152,12 +152,11 @@ defmodule SlackBot.ConnectionManager do
 
   defp connect(state) do
     config = ConfigServer.config(state.config_server)
-    state = %{state | config: config}
-
-    case config.http_client.apps_connections_open(config) do
-      {:ok, url} ->
-        start_transport(url, state)
-
+    with {:ok, config_with_identity} <- discover_identity(config),
+         {:ok, url} <- config_with_identity.http_client.apps_connections_open(config_with_identity) do
+      state = %{state | config: config_with_identity}
+      start_transport(url, state)
+    else
       {:rate_limited, secs} ->
         Logger.warning("[SlackBot] rate limited, retrying in #{secs}s")
         Telemetry.execute(config, [:connection, :rate_limited], %{delay_ms: secs * 1_000}, %{})
@@ -322,6 +321,28 @@ defmodule SlackBot.ConnectionManager do
   defp backoff_delay(state) do
     attempt = max(state.attempt, 1)
     Backoff.next_delay(state.config.backoff, attempt)
+  end
+
+  defp discover_identity(%Config{} = config) do
+    case config.http_client.post(config, "auth.test", %{}) do
+      {:ok, %{"user_id" => bot_user_id}} ->
+        assigns = Map.put(config.assigns, :bot_user_id, bot_user_id)
+        {:ok, %Config{config | assigns: assigns}}
+
+      {:error, {:rate_limited, secs}} ->
+        Logger.warning(
+          "[SlackBot] failed to discover bot user id via auth.test: rate limited, retrying in #{secs}s"
+        )
+
+        {:rate_limited, secs}
+
+      {:error, reason} ->
+        Logger.warning(
+          "[SlackBot] failed to discover bot user id via auth.test: #{inspect(reason)}"
+        )
+
+        {:error, {:identity_error, reason}}
+    end
   end
 
   defp now_ms, do: System.monotonic_time(:millisecond)

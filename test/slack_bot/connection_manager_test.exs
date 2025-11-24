@@ -18,7 +18,7 @@ defmodule SlackBot.ConnectionManagerTest do
       transport: SlackBot.TestTransport,
       transport_opts: [notify: self()],
       http_client: SlackBot.TestHTTP,
-      assigns: %{test_pid: self(), bot_user_id: "B1"},
+      assigns: %{test_pid: self()},
       instance_name: instance
     ]
 
@@ -79,7 +79,8 @@ defmodule SlackBot.ConnectionManagerTest do
       %{"envelope_id" => "E2"}
     )
 
-    assert_receive {:handled, "member_joined_channel", _payload, _ctx}
+    assert_receive {:handled, "member_joined_channel", _payload, ctx}
+    assert ctx.assigns.bot_user_id == "B1"
     assert Cache.channels(config) == ["C123"]
 
     SlackBot.TestTransport.emit(
