@@ -32,6 +32,12 @@ mix run --no-halt
 The example depends on the parent repo via `{:slack_bot_ws, path: "../.."}` so you can
 modify the library and test behavior immediately.
 
+The example uses the same `otp_app` pattern as the main README:
+
+- `BasicBot.SlackBot` is the SlackBot entrypoint (`use SlackBot, otp_app: :basic_bot`).
+- `BasicBot` defines the router with handlers, middleware, and slash grammars.
+- `BasicBot.Application` supervises `BasicBot.SlackBot` directly.
+
 ## Slash Commands to Try
 
 - `/demo list short fleet tag alpha tag beta`

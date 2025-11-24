@@ -1,6 +1,6 @@
 defmodule BasicBot do
   @moduledoc """
-  Example SlackBot handler demonstrating events, middleware, slash grammars,
+  Example SlackBot router demonstrating events, middleware, slash grammars,
   diagnostics replay, and auto-ack modes.
   """
 

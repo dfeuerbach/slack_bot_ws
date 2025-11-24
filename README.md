@@ -15,6 +15,12 @@ SlackBot is a socket-mode client for building resilient Slack automations in Eli
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
 
+If you have [Igniter](https://hexdocs.pm/igniter) available in your project, `mix slack_bot_ws.install`
+can scaffold a bot module, config, and supervision wiring for you so you can be talking to Slack
+in a couple of minutes. The same task will also copy the library’s `AGENTS.md` into your app: it
+either appends a **SlackBot** section to your existing `AGENTS.md` or creates/updates
+`SLACK_BOT_AGENTS.md` with SlackBot-specific guidance for AI coding agents and other automation.
+
 ## Installation
 
 Add SlackBot to your `mix.exs` (replace version with the latest release on Hex):
@@ -35,67 +41,104 @@ mix deps.get
 
 ## Quick Start
 
-1. Configure your Slack tokens and runtime options (final API subject to change as phases progress):
+1. Define a bot module using `SlackBot`:
 
 ```elixir
-config :slack_bot_ws, SlackBot,
+defmodule MyApp.SlackBot do
+  use SlackBot, otp_app: :my_app
+
+  handle_event "message", event, _ctx do
+    SlackBot.push({"chat.postMessage", %{
+      "channel" => event["channel"],
+      "text" => "Hello from MyApp.SlackBot!"
+    }})
+  end
+end
+```
+
+2. Configure your Slack tokens (for example in `config/config.exs`):
+
+```elixir
+config :my_app, MyApp.SlackBot,
   app_token: System.fetch_env!("SLACK_APP_TOKEN"),
-  bot_token: System.fetch_env!("SLACK_BOT_TOKEN"),
-  telemetry_prefix: [:slackbot],
-  cache: {:ets, []},
-  event_buffer: {:ets, []},
-  diagnostics: [enabled: true, buffer_size: 300],
-  ack_mode: :ephemeral,
-  assigns: %{bot_user_id: System.get_env("SLACK_BOT_USER_ID")}
+  bot_token: System.fetch_env!("SLACK_BOT_TOKEN")
 ```
 
-> Configuration changes take effect after the `SlackBot` supervisor is restarted.
-> Update your config and then restart the supervised bot (for example by
-> restarting your application or the specific supervisor branch).
-
-2. Use the handler DSL to declare events and slash commands:
+3. Supervise your bot alongside your application processes:
 
 ```elixir
-defmodule MyBot do
-  use SlackBot
+children = [
+  MyApp.SlackBot
+]
 
-  middleware SlackBot.Middleware.Logger
-
-  handle_event "member_joined_channel", event, ctx do
-    SlackBot.Cache.channels(ctx.bot) |> log_join(event["channel"])
-  end
-
-  # auto-sends an ephemeral "Processing..." ack before heavy work
-  slash "/deploy", ack: :ephemeral do
-    grammar do
-      value :service
-      optional literal("short", as: :short?)
-      repeat do
-        literal "param"
-        value :params
-      end
-    end
-
-    handle payload, ctx do
-      parsed = payload["parsed"]
-      Deployments.kick(parsed.service, parsed.params, ctx)
-    end
-  end
-end
+Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
-> Existing bots using `handle_slash/3` still work. `payload["parsed"].args` now contains
-> the tokenized arguments for those handlers, while the DSL produces structured maps.
+With just those three pieces (module, config, supervision), SlackBot boots a Socket Mode connection
+with sensible defaults for backoff, heartbeats, ETS-backed cache + event buffer, telemetry prefix,
+diagnostics (off by default), and slash-command acknowledgement strategy. You can refine those via
+advanced configuration once you are comfortable with the basics.
 
-Interactive payloads (global shortcuts, message shortcuts, block actions, message actions, workflow step events, block suggestions, modal submissions) are delivered to the router using their native Slack type. Use the regular `handle_event/3` macro or pattern match on the payload:
+## Advanced configuration
 
-```elixir
-handle_event "shortcut", payload, ctx do
-  if payload["callback_id"] == "demo-shortcut" do
-    MyApp.handle_shortcut(payload, ctx)
-  end
-end
-```
+The configuration surface is deliberately broad, but every option is optional—if you skip this
+section, you still get a production-ready baseline. When you are ready to tune behaviour, you can
+override any of the following keys under your bot module’s config:
+
+- **Connection & backoff**
+  - **`backoff`**: `min_ms`, `max_ms`, `max_attempts`, `jitter_ratio` (controls reconnect timing).
+  - **`heartbeat_ms` / `ping_timeout_ms`**: how aggressively to enforce Slack’s ping/pong discipline.
+  - **`log_level`**: log verbosity for the connection manager and helpers.
+
+- **Telemetry**
+  - **`telemetry_prefix`**: prefix for all Telemetry events (defaults to `[:slackbot]`).
+
+- **Cache & event buffer**
+  - **`cache`**: choose ETS or a custom adapter:
+
+    ```elixir
+    cache: {:ets, []}
+    cache: {:ets, [mode: :async]}
+    cache: {:adapter, MyApp.CacheAdapter, []}
+    ```
+
+  - **`event_buffer`**: choose ETS or a custom adapter (Redis adapter included):
+
+    ```elixir
+    event_buffer: {:ets, []}
+
+    event_buffer:
+      {:adapter, SlackBot.EventBuffer.Adapters.Redis,
+       redis: [host: "127.0.0.1", port: 6379], namespace: "slackbot"}
+    ```
+
+- **Slash-command acknowledgements**
+  - **`ack_mode`**: `:silent` (default), `:ephemeral`, or `{:custom, (map(), SlackBot.Config.t() -> any())}`.
+  - **`assigns`**: you can set `:slash_ack_text` to customize the ephemeral text and
+    `:bot_user_id` to help the cache track channel membership for the bot user.
+
+- **Diagnostics**
+  - **`diagnostics`**: enable the ring buffer and set its size:
+
+    ```elixir
+    diagnostics: [enabled: true, buffer_size: 300]
+    ```
+
+    See `SlackBot.Diagnostics` and `docs/diagnostics.md` for how to list, clear, and replay entries.
+
+- **Web API pooling**
+  - **`api_pool_opts`**: forwarded to Finch for Web API requests:
+
+    ```elixir
+    api_pool_opts: [
+      pools: %{
+        default: [size: 20, count: 2]
+      }
+    ]
+    ```
+
+These options can be mixed and matched; anything you omit falls back to the defaults described in
+`SlackBot.Config`’s moduledoc.
 
 ## Event Pipeline & Middleware
 

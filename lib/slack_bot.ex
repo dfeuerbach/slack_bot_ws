@@ -166,8 +166,29 @@ defmodule SlackBot do
   end
 
   defmacro __using__(opts \\ []) do
-    quote do
-      use SlackBot.Router, unquote(opts)
+    otp_app = Keyword.get(opts, :otp_app)
+    router_opts = Keyword.delete(opts, :otp_app)
+
+    quote bind_quoted: [router_opts: router_opts, otp_app: otp_app] do
+      use SlackBot.Router, router_opts
+
+      if otp_app do
+        @slackbot_otp_app otp_app
+
+        @doc false
+        @spec child_spec(keyword()) :: Supervisor.child_spec()
+        def child_spec(opts \\ []) do
+          env_opts = Application.get_env(@slackbot_otp_app, __MODULE__, [])
+
+          full_opts =
+            env_opts
+            |> Keyword.put_new(:name, __MODULE__)
+            |> Keyword.put_new(:module, __MODULE__)
+            |> Keyword.merge(opts)
+
+          SlackBot.child_spec(full_opts)
+        end
+      end
     end
   end
 
