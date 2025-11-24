@@ -14,7 +14,6 @@ This sample Mix project shows how to wire SlackBot into an OTP application with:
 - Slack app configured for Socket Mode with the following tokens:
   - `SLACK_APP_TOKEN` (starts with `xapp-`)
   - `SLACK_BOT_TOKEN` (starts with `xoxb-`)
-  - `SLACK_BOT_USER_ID` (bot user ID, used for cache updates)
 - Elixir 1.14+, OTP 25+
 
 ## Install & Run
@@ -25,7 +24,6 @@ mix deps.get
 
 export SLACK_APP_TOKEN="xapp-XXX"
 export SLACK_BOT_TOKEN="xoxb-YYY"
-export SLACK_BOT_USER_ID="BZZZ"
 
 mix run --no-halt
 ```
