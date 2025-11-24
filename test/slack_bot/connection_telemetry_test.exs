@@ -1,6 +1,8 @@
 defmodule SlackBot.ConnectionTelemetryTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias SlackBot.Cache
   alias SlackBot.EventBuffer
 
@@ -47,20 +49,22 @@ defmodule SlackBot.ConnectionTelemetryTest do
 
     on_exit(fn -> :telemetry.detach(handler_id) end)
 
-    {:ok, _pid} =
-      start_supervised(
-        {SlackBot.ConnectionManager,
-         name: :ct_manager, config_server: :ct_config, task_supervisor: :ct_tasks}
-      )
+    capture_log(fn ->
+      {:ok, _pid} =
+        start_supervised(
+          {SlackBot.ConnectionManager,
+           name: :ct_manager, config_server: :ct_config, task_supervisor: :ct_tasks}
+        )
 
-    assert_receive {:test_transport, transport_pid}
+      assert_receive {:test_transport, transport_pid}
 
-    assert_receive {:telemetry_event, [:slackbot, :connection, :state], %{count: 1},
-                    %{state: :connected}}
+      assert_receive {:telemetry_event, [:slackbot, :connection, :state], %{count: 1},
+                      %{state: :connected}}
 
-    SlackBot.TestTransport.disconnect(transport_pid, %{"reason" => "refresh"})
+      SlackBot.TestTransport.disconnect(transport_pid, %{"reason" => "refresh"})
 
-    assert_receive {:telemetry_event, [:slackbot, :connection, :state], %{count: 1},
-                    %{state: :disconnect, reason: %{"reason" => "refresh"}}}
+      assert_receive {:telemetry_event, [:slackbot, :connection, :state], %{count: 1},
+                      %{state: :disconnect, reason: %{"reason" => "refresh"}}}
+    end)
   end
 end
