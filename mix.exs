@@ -41,7 +41,8 @@ defmodule SlackBot.MixProject do
       {:req, "~> 0.4"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
-      {:redix, "~> 1.2", optional: true}
+      {:redix, "~> 1.2", optional: true},
+      {:igniter, "~> 0.6", optional: true}
     ]
   end
 
