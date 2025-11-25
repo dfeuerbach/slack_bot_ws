@@ -259,9 +259,11 @@ defmodule SlackBot.Router do
       type == "slash_commands" ->
         case find_slash_handler(handlers, payload) do
           nil ->
+            Logger.debug("[SlackBot.Router] no slash handler for command=#{inspect(payload["command"])}")
             :ok
 
           {:slash_dsl, command, fun, grammar, opts} ->
+            Logger.debug("[SlackBot.Router] dispatching slash command=#{command} payload=#{inspect(payload)}")
             handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
         end
 

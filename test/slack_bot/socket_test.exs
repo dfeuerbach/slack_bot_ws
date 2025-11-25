@@ -26,4 +26,30 @@ defmodule SlackBot.SocketTest do
     assert {:event, "reaction_added", %{"type" => "reaction_added"}} =
              Socket.classify_payload(payload)
   end
+
+  test "routes slash command envelopes from the socket" do
+    config =
+      SlackBot.Config.build!(
+        app_token: "xapp-socket",
+        bot_token: "xoxb-socket",
+        module: SlackBot.TestHandler,
+        instance_name: __MODULE__
+      )
+
+    state = %{manager: self(), config: config}
+
+    payload = %{"command" => "/demo", "text" => "help"}
+
+    envelope = %{
+      "envelope_id" => "E1",
+      "type" => "slash_commands",
+      "payload" => payload
+    }
+
+    frame = {:text, Jason.encode!(envelope)}
+
+    assert {:ok, ^state} = Socket.handle_frame(frame, state)
+
+    assert_receive {:slackbot, :slash_command, ^payload, ^envelope}
+  end
 end

@@ -46,7 +46,10 @@ defmodule SlackBot.Socket do
   @impl WebSockex
   def handle_frame({:text, payload}, state) do
     case Jason.decode(payload) do
-      {:ok, decoded} -> handle_decoded(decoded, state)
+      {:ok, decoded} ->
+        Logger.debug("[SlackBot.Socket] incoming frame #{inspect(decoded)}")
+        handle_decoded(decoded, state)
+
       {:error, reason} -> log_decode_error(reason, payload, state)
     end
   end
@@ -71,6 +74,12 @@ defmodule SlackBot.Socket do
 
   defp handle_decoded(%{"type" => "disconnect"} = message, state) do
     send(state.manager, {:slackbot, :disconnect, message})
+    {:ok, state}
+  end
+
+  defp handle_decoded(%{"type" => "slash_commands", "payload" => payload} = envelope, state) do
+    ack(envelope, state.config)
+    send(state.manager, {:slackbot, :slash_command, payload, envelope})
     {:ok, state}
   end
 
