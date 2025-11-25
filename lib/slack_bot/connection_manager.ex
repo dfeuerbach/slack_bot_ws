@@ -56,23 +56,6 @@ defmodule SlackBot.ConnectionManager do
     connect(state)
   end
 
-  def handle_info(:heartbeat, state) do
-    schedule_heartbeat(state.config)
-
-    cond do
-      is_nil(state.transport_pid) ->
-        {:noreply, state}
-
-      now_ms() - state.last_activity > state.config.heartbeat_ms + state.config.ping_timeout_ms ->
-        Logger.warning("[SlackBot] heartbeat timeout, restarting connection")
-        Telemetry.execute(state.config, [:connection, :heartbeat_timeout], %{count: 1}, %{})
-        reset_transport(state, :heartbeat_timeout)
-
-      true ->
-        {:noreply, state}
-    end
-  end
-
   def handle_info({:slackbot, :connected, pid}, state) do
     Logger.debug("[SlackBot] connected via #{inspect(pid)}")
     Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{state: :connected})
@@ -183,7 +166,6 @@ defmodule SlackBot.ConnectionManager do
     case state.config.transport.start_link(url, opts) do
       {:ok, pid} ->
         Logger.info("[SlackBot] connected to Slack socket")
-        schedule_heartbeat(state.config)
 
         {:noreply,
          %{
@@ -227,10 +209,6 @@ defmodule SlackBot.ConnectionManager do
     end
   end
 
-  defp schedule_heartbeat(config) do
-    Process.send_after(self(), :heartbeat, config.heartbeat_ms)
-  end
-
   defp dispatch_event(type, payload, envelope, state) do
     key = envelope_id(envelope)
 
@@ -240,6 +218,8 @@ defmodule SlackBot.ConnectionManager do
         {:noreply, state}
 
       _ ->
+        Logger.debug("[SlackBot] dispatching type=#{type} payload=#{inspect(payload)}")
+
         Diagnostics.record(state.config, :inbound, %{
           type: type,
           payload: payload,

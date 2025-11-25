@@ -11,7 +11,7 @@
 ## Public API & Configuration
 - `SlackBot.start_link/1`: accepts keyword list or `%SlackBot.Config{}` with:
   - tokens/ids (`app_token`, `bot_token`, `team_id`, `user_id`, `bot_id`)
-  - connection opts: `backoff: {min_ms, max_ms, max_attempts}`, `heartbeat_ms`, `ping_timeout_ms`, `log_level`, `telemetry_prefix`
+  - connection opts: `backoff: {min_ms, max_ms, max_attempts}`, `log_level`, `telemetry_prefix`
   - handler DSL macros: `handle_event/3`, `slash/2`, `middleware/1`
   - slash command ack strategy: `:silent` (default), `:ephemeral`, `{:custom, fun}` with per-command override
   - Web API pooling: `api_pool_opts` (forwarded to Finch; defaults to `name: <instance>.APIFinch`)
@@ -43,7 +43,7 @@ SlackBot.Supervisor
 
 ### Connection Manager
 - Mirrors `Slack.Socket` backoff logic; parametrized jitter and max attempts.
-- Tracks Slack 15s ping/pong expectations; emits telemetry + triggers reconnect when heartbeats lapse.
+- Relies on Slack’s Socket Mode lifecycle (`hello`, `disconnect` frames) and WebSocket errors for reconnect decisions instead of custom heartbeats.
 - Immediately decodes envelopes, delegates to `SlackBot.EventBuffer` for dedupe bookkeeping, then spawns handler task and acks right away.
 - Web API helpers reuse a per-instance Finch pool (`api_pool_opts`) so Req requests keep warm connections without starving slash-ack traffic (which uses a separate pool).
 

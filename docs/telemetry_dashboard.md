@@ -9,7 +9,6 @@ to those events and surface them in Phoenix LiveDashboard (or any Telemetry cons
 | Event | Measurements | Metadata |
 | --- | --- | --- |
 | `[:slackbot, :connection, :state]` | `%{count: 1}` | `%{state: :connected | :disconnected | :terminated | :down | :error, reason: term()}` |
-| `[:slackbot, :connection, :heartbeat_timeout]` | `%{count: 1}` | `%{}` |
 | `[:slackbot, :connection, :rate_limited]` | `%{delay_ms: integer}` | `%{}` |
 | `[:slackbot, :handler, :dispatch, :start/:stop]` (Telemetry span) | `%{system_time: native}` | `%{type: event_type}` |
 | `[:slackbot, :diagnostics, :record]` | `%{count: 1}` | `%{direction: :inbound | :outbound}` |
@@ -37,9 +36,6 @@ defmodule MyAppWeb.Telemetry do
       counter(@slackbot_prefix ++ [:connection, :state],
         tags: [:state],
         description: "Connection state transitions"
-      ),
-      counter(@slackbot_prefix ++ [:connection, :heartbeat_timeout],
-        description: "Heartbeat timeouts"
       ),
       last_value(@slackbot_prefix ++ [:connection, :rate_limited],
         unit: :millisecond,

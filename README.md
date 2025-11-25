@@ -87,7 +87,6 @@ override any of the following keys under your bot module’s config:
 
 - **Connection & backoff**
   - **`backoff`**: `min_ms`, `max_ms`, `max_attempts`, `jitter_ratio` (controls reconnect timing).
-  - **`heartbeat_ms` / `ping_timeout_ms`**: how aggressively to enforce Slack’s ping/pong discipline.
   - **`log_level`**: log verbosity for the connection manager and helpers.
 
 - **Telemetry**

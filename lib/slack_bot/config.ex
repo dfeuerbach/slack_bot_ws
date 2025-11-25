@@ -8,8 +8,6 @@ defmodule SlackBot.Config do
   """
 
   @app :slack_bot_ws
-  @positive_defaults %{heartbeat_ms: 15_000, ping_timeout_ms: 5_000}
-
   alias SlackBot.API
   alias SlackBot.Socket
   alias SlackBot.SlashAck.HTTP, as: AckHTTP
@@ -29,8 +27,6 @@ defmodule SlackBot.Config do
     event_buffer: {:ets, []},
     block_builder: :none,
     backoff: %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity, jitter_ratio: 0.2},
-    heartbeat_ms: 15_000,
-    ping_timeout_ms: 5_000,
     ack_mode: :silent,
     ack_client: AckHTTP,
     api_pool_opts: [],
@@ -57,8 +53,6 @@ defmodule SlackBot.Config do
             max_attempts: pos_integer() | :infinity,
             jitter_ratio: number()
           },
-          heartbeat_ms: pos_integer(),
-          ping_timeout_ms: pos_integer(),
           ack_mode: :silent | :ephemeral | {:custom, (map(), t() -> any())},
           ack_client: module(),
           api_pool_opts: keyword(),
@@ -126,8 +120,6 @@ defmodule SlackBot.Config do
          {:ok, event_buffer} <- fetch_event_buffer(opts),
          {:ok, block_builder} <- fetch_block_builder(opts),
          {:ok, backoff} <- fetch_backoff(opts),
-         {:ok, heartbeat_ms} <- fetch_positive(opts, :heartbeat_ms),
-         {:ok, ping_timeout_ms} <- fetch_positive(opts, :ping_timeout_ms),
          {:ok, ack_mode} <- fetch_ack_mode(opts),
          {:ok, ack_client} <- fetch_module_option(opts, :ack_client, AckHTTP),
          {:ok, api_pool_opts} <- fetch_keyword(opts, :api_pool_opts, []),
@@ -143,8 +135,6 @@ defmodule SlackBot.Config do
          event_buffer: event_buffer,
          block_builder: block_builder,
          backoff: backoff,
-         heartbeat_ms: heartbeat_ms,
-         ping_timeout_ms: ping_timeout_ms,
          ack_mode: ack_mode,
          ack_client: ack_client,
          api_pool_opts: api_pool_opts,
@@ -273,16 +263,6 @@ defmodule SlackBot.Config do
 
       true ->
         {:ok, merged}
-    end
-  end
-
-  defp fetch_positive(opts, key) do
-    value = Keyword.get(opts, key, Map.fetch!(@positive_defaults, key))
-
-    if positive?(value) do
-      {:ok, value}
-    else
-      {:error, {:invalid_positive_option, key, value}}
     end
   end
 
