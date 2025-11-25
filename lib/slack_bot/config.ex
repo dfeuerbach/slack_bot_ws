@@ -31,7 +31,8 @@ defmodule SlackBot.Config do
     ack_client: AckHTTP,
     api_pool_opts: [],
     diagnostics: %{enabled: false, buffer_size: 200},
-    log_level: :info
+    log_level: :info,
+    health_check: %{enabled: true, interval_ms: 30_000}
   ]
 
   @type t :: %__MODULE__{
@@ -60,7 +61,11 @@ defmodule SlackBot.Config do
             enabled: boolean(),
             buffer_size: pos_integer()
           },
-          log_level: Logger.level()
+          log_level: Logger.level(),
+          health_check: %{
+            enabled: boolean(),
+            interval_ms: pos_integer()
+          }
         }
 
   @doc """
@@ -124,7 +129,8 @@ defmodule SlackBot.Config do
          {:ok, ack_client} <- fetch_module_option(opts, :ack_client, AckHTTP),
          {:ok, api_pool_opts} <- fetch_keyword(opts, :api_pool_opts, []),
          {:ok, diagnostics} <- fetch_diagnostics(opts),
-         {:ok, log_level} <- fetch_log_level(opts) do
+         {:ok, log_level} <- fetch_log_level(opts),
+         {:ok, health_check} <- fetch_health_check(opts) do
       {:ok,
        struct!(__MODULE__, %{
          app_token: app_token,
@@ -144,7 +150,8 @@ defmodule SlackBot.Config do
          transport_opts: transport_opts,
          http_client: http_client,
          assigns: assigns,
-         instance_name: Keyword.get(opts, :instance_name)
+         instance_name: Keyword.get(opts, :instance_name),
+         health_check: health_check
        })}
     end
   end
@@ -303,6 +310,29 @@ defmodule SlackBot.Config do
       {:ok, value}
     else
       :invalid -> {:error, {:invalid_diagnostics_option, raw}}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_health_check(opts) do
+    raw = Keyword.get(opts, :health_check, [])
+    defaults = %{enabled: true, interval_ms: 30_000}
+
+    map =
+      cond do
+        is_list(raw) -> Map.merge(defaults, Map.new(raw))
+        is_map(raw) -> Map.merge(defaults, raw)
+        is_boolean(raw) -> Map.put(defaults, :enabled, raw)
+        is_integer(raw) and raw > 0 -> %{enabled: true, interval_ms: raw}
+        true -> :invalid
+      end
+
+    with %{enabled: enabled, interval_ms: interval_ms} = value when map != :invalid <- map,
+         true <- is_boolean(enabled) || {:error, {:invalid_health_check_enabled, enabled}},
+         true <- positive?(interval_ms) || {:error, {:invalid_health_check_interval, interval_ms}} do
+      {:ok, value}
+    else
+      :invalid -> {:error, {:invalid_health_check_option, raw}}
       {:error, reason} -> {:error, reason}
     end
   end

@@ -5,11 +5,11 @@
 SlackBot is a socket-mode client for building resilient Slack automations in Elixir. It focuses on fast acknowledgements, supervised event handling, deterministic slash-command parsing, and a developer-friendly configuration surface.
 
 ## Highlights
-- Supervised WebSocket connection manager with rate-limit aware backoff and heartbeat monitoring
+- Supervised WebSocket connection manager with rate-limit aware backoff and robust, HTTP-based health monitoring
 - Task-based event fan-out with dedupe and replay safeguards
 - Pluggable cache/event buffer adapters (ETS by default, Redis adapter included for multi-node dedupe)
-- Declarative handler DSL for events, slash commands, shortcuts, and middleware
-- Slash-command grammar DSL that produces deterministic, structured payloads
+- Declarative router DSL for events and shortcuts with first-class middleware (`handle_event`, `middleware`, `slash`, etc.)
+- Slash-command grammar DSL that turns raw `/slash` text into deterministic, structured maps (no manual string-splitting)
 - Native routing for Slack interactivity payloads (global/message shortcuts, message actions, workflow steps, block suggestions, modal submissions)
 - Optional BlockBox integration for composing Block Kit payloads (see [BlockBox docs](https://hexdocs.pm/blockbox/BlockBox.html))
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
@@ -88,6 +88,7 @@ override any of the following keys under your bot module’s config:
 - **Connection & backoff**
   - **`backoff`**: `min_ms`, `max_ms`, `max_attempts`, `jitter_ratio` (controls reconnect timing).
   - **`log_level`**: log verbosity for the connection manager and helpers.
+  - **`health_check`**: HTTP-based health pings (`auth.test`) that monitor Slack/Web API reachability and nudge the connection manager to reconnect on repeated network failures.
 
 - **Telemetry**
   - **`telemetry_prefix`**: prefix for all Telemetry events (defaults to `[:slackbot]`).
@@ -290,9 +291,9 @@ to intercept the replay without touching the live connection. See
 ## Telemetry & LiveDashboard
 
 SlackBot emits Telemetry events for connection state, handler spans, diagnostics record/replay,
-and rate limiting. See [`docs/telemetry_dashboard.md`](docs/telemetry_dashboard.md) for
-LiveDashboard metric definitions and examples of attaching plain telemetry handlers when
-Phoenix is not available.
+rate limiting, and HTTP-based health checks (via `[:slackbot, :healthcheck, :ping]`). See
+[`docs/telemetry_dashboard.md`](docs/telemetry_dashboard.md) for LiveDashboard metric definitions
+and examples of attaching plain telemetry handlers when Phoenix is not available.
 
 ## Slash Command Grammar
 

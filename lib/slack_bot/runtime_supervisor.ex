@@ -43,7 +43,11 @@ defmodule SlackBot.RuntimeSupervisor do
         {SlackBot.ConnectionManager,
          name: connection_manager_name,
          config_server: config_server,
-         task_supervisor: task_supervisor_name}
+         task_supervisor: task_supervisor_name},
+        {SlackBot.HealthMonitor,
+         name: Module.concat(base_name, :HealthMonitor),
+         config_server: config_server,
+         connection_manager: connection_manager_name}
       ])
 
     Supervisor.init(children, strategy: :rest_for_one, max_restarts: 10_000, max_seconds: 60)

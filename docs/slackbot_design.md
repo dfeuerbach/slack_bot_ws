@@ -18,6 +18,7 @@
   - cache adapter spec: `cache: {:ets, opts} | {:adapter, module, opts}`
   - event buffer adapter spec: `event_buffer: {:ets, opts} | {:adapter, module, opts}`
   - diagnostics toggle: `diagnostics: [enabled: boolean(), buffer_size: pos_integer()]`
+  - HTTP health monitor toggle: `health_check: [enabled: boolean(), interval_ms: pos_integer()]`
   - optional BlockBox toggle: `block_builder: :none | {:blockbox, opts}`
 - Runtime helpers:
   - `SlackBot.push(bot, request)` – convenience wrappers around Slack Web API (backed by Req/Finch).
@@ -46,6 +47,11 @@ SlackBot.Supervisor
 - Relies on Slack’s Socket Mode lifecycle (`hello`, `disconnect` frames) and WebSocket errors for reconnect decisions instead of custom heartbeats.
 - Immediately decodes envelopes, delegates to `SlackBot.EventBuffer` for dedupe bookkeeping, then spawns handler task and acks right away.
 - Web API helpers reuse a per-instance Finch pool (`api_pool_opts`) so Req requests keep warm connections without starving slash-ack traffic (which uses a separate pool).
+
+### Health Monitor
+- `SlackBot.HealthMonitor` runs per instance and issues periodic `auth.test` requests through the configured HTTP client.
+- Failed pings emit `[:slackbot, :healthcheck, :ping]` Telemetry and, for network errors, notify the connection manager to reset the transport using the existing backoff logic.
+- Rate limits and fatal auth errors are surfaced via Telemetry but do not cause aggressive reconnect loops on their own.
 
 ### Event Buffer & Caching
 - `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks now center on `record(key, payload) :: {:ok | :duplicate, state}`, `delete/2`, `seen?/2`, and `pending/1`, letting the connection manager dedupe envelopes in a single RPC.

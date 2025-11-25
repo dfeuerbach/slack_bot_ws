@@ -7,7 +7,8 @@ This sample Mix project shows how to wire SlackBot into an OTP application with:
 - diagnostics capture/replay,
 - auto-ack strategies (`:ephemeral` + `{:custom, fun}`),
 - optional BlockBox helpers (falls back to map builders if not installed),
-- explicit ephemeral messaging and async Web API usage.
+- explicit ephemeral messaging and async Web API usage,
+- robust connection health monitoring and automatic reconnects via the library’s HTTP-based health checks.
 
 ## Prerequisites
 
