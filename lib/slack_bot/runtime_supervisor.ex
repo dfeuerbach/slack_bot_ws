@@ -50,6 +50,6 @@ defmodule SlackBot.RuntimeSupervisor do
          connection_manager: connection_manager_name}
       ])
 
-    Supervisor.init(children, strategy: :rest_for_one, max_restarts: 10_000, max_seconds: 60)
+    Supervisor.init(children, strategy: :rest_for_one, max_restarts: 10, max_seconds: 60)
   end
 end
