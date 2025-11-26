@@ -155,7 +155,7 @@ defmodule BasicBot do
 
   defp help_text do
     """
-    `/demo list [short] SUBJECT [tag TAG ...]` - list details for a subject with optional tags.
+    `/demo list short fleet tag alpha tag beta` - list details for a subject with optional tags.
     `/demo report TEAM` - queue a diagnostics report for a team.
     `/demo blocks` - send a Block Kit message (uses BlockBox when configured).
     `/demo ping-ephemeral` - send an ephemeral message visible only to you.
