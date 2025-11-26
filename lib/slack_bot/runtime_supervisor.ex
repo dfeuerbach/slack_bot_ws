@@ -31,6 +31,7 @@ defmodule SlackBot.RuntimeSupervisor do
       []
       |> Kernel.++(SlackBot.Cache.child_specs(config))
       |> Kernel.++([SlackBot.EventBuffer.child_spec(config)])
+      |> Kernel.++(rate_limiter_child_specs(config))
       |> Kernel.++([SlackBot.Diagnostics.child_spec(config)])
       |> Kernel.++([
         {Finch, name: ack_pool_name},
@@ -51,5 +52,11 @@ defmodule SlackBot.RuntimeSupervisor do
       ])
 
     Supervisor.init(children, strategy: :rest_for_one, max_restarts: 10, max_seconds: 60)
+  end
+
+  defp rate_limiter_child_specs(%SlackBot.Config{rate_limiter: :none}), do: []
+
+  defp rate_limiter_child_specs(%SlackBot.Config{} = config) do
+    [SlackBot.RateLimiter.child_spec(config)]
   end
 end

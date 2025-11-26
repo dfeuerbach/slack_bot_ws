@@ -22,6 +22,7 @@ defmodule SlackBot do
   alias SlackBot.ConfigServer
   alias SlackBot.ConnectionManager
   alias SlackBot.Diagnostics
+  alias SlackBot.RateLimiter
   alias SlackBot.Telemetry
 
   @reserved_supervisor_opts [:name, :config_server, :runtime_supervisor]
@@ -76,31 +77,33 @@ defmodule SlackBot do
   def push(server \\ __MODULE__, {method, body}) when is_binary(method) and is_map(body) do
     config = config(server)
 
-    start = System.monotonic_time()
+    RateLimiter.around_request(config, method, body, fn ->
+      start = System.monotonic_time()
 
-    try do
-      result = config.http_client.post(config, method, body)
-      duration = System.monotonic_time() - start
-
-      Telemetry.execute(
-        config,
-        [:api, :request],
-        %{duration: duration},
-        %{method: method, status: api_status(result)}
-      )
-
-      result
-    rescue
-      exception ->
+      try do
+        result = config.http_client.post(config, method, body)
         duration = System.monotonic_time() - start
 
-        Telemetry.execute(config, [:api, :request], %{duration: duration}, %{
-          method: method,
-          status: :exception
-        })
+        Telemetry.execute(
+          config,
+          [:api, :request],
+          %{duration: duration},
+          %{method: method, status: api_status(result)}
+        )
 
-        reraise exception, __STACKTRACE__
-    end
+        result
+      rescue
+        exception ->
+          duration = System.monotonic_time() - start
+
+          Telemetry.execute(config, [:api, :request], %{duration: duration}, %{
+            method: method,
+            status: :exception
+          })
+
+          reraise exception, __STACKTRACE__
+      end
+    end)
   end
 
   @doc """

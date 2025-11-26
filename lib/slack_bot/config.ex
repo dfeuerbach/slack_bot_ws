@@ -11,6 +11,7 @@ defmodule SlackBot.Config do
   alias SlackBot.API
   alias SlackBot.Socket
   alias SlackBot.SlashAck.HTTP, as: AckHTTP
+  alias SlackBot.RateLimiter.Adapters.ETS, as: RateLimiterETS
 
   @enforce_keys [:app_token, :bot_token, :module]
   defstruct [
@@ -25,6 +26,7 @@ defmodule SlackBot.Config do
     telemetry_prefix: [:slackbot],
     cache: {:ets, []},
     event_buffer: {:ets, []},
+    rate_limiter: {:adapter, RateLimiterETS, []},
     block_builder: :none,
     backoff: %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity, jitter_ratio: 0.2},
     ack_mode: :silent,
@@ -47,6 +49,7 @@ defmodule SlackBot.Config do
           telemetry_prefix: [atom()],
           cache: {:ets | :adapter, any()},
           event_buffer: {:ets | :adapter, any()},
+          rate_limiter: :none | {:adapter, module(), keyword()},
           block_builder: :none | {:blockbox, keyword()},
           backoff: %{
             min_ms: pos_integer(),
@@ -123,6 +126,7 @@ defmodule SlackBot.Config do
          {:ok, assigns} <- fetch_assigns(opts),
          {:ok, cache} <- fetch_cache(opts),
          {:ok, event_buffer} <- fetch_event_buffer(opts),
+         {:ok, rate_limiter} <- fetch_rate_limiter(opts),
          {:ok, block_builder} <- fetch_block_builder(opts),
          {:ok, backoff} <- fetch_backoff(opts),
          {:ok, ack_mode} <- fetch_ack_mode(opts),
@@ -139,6 +143,7 @@ defmodule SlackBot.Config do
          telemetry_prefix: telemetry_prefix,
          cache: cache,
          event_buffer: event_buffer,
+         rate_limiter: rate_limiter,
          block_builder: block_builder,
          backoff: backoff,
          ack_mode: ack_mode,
@@ -238,6 +243,24 @@ defmodule SlackBot.Config do
 
       other ->
         {:error, {:invalid_event_buffer_option, other}}
+    end
+  end
+
+  defp fetch_rate_limiter(opts) do
+    default = {:adapter, RateLimiterETS, []}
+
+    case Keyword.get(opts, :rate_limiter, default) do
+      :none ->
+        {:ok, :none}
+
+      {:adapter, module} when is_atom(module) ->
+        {:ok, {:adapter, module, []}}
+
+      {:adapter, module, adapter_opts} when is_atom(module) and is_list(adapter_opts) ->
+        {:ok, {:adapter, module, adapter_opts}}
+
+      other ->
+        {:error, {:invalid_rate_limiter_option, other}}
     end
   end
 
