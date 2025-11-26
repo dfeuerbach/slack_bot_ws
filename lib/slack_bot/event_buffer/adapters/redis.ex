@@ -11,10 +11,14 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
     * `:conn` – alternatively pass an existing Redix connection PID to reuse pools.
     * `:namespace` – Redis key namespace (default: `"slackbot:event_buffer"`).
     * `:ttl_ms` – milliseconds before entries expire (default: 5 minutes).
+    * `:redix` – (advanced) module implementing the `Redix` API, defaulting to `Redix`.
+      Primarily useful for injecting a test double in unit tests.
   """
 
   @behaviour SlackBot.EventBuffer.Adapter
   @compile {:no_warn_undefined, Redix}
+
+  require Logger
 
   @default_ttl 5 * 60_000
   @prune_window 10 * 60_000
@@ -24,6 +28,7 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
     instance = Keyword.fetch!(opts, :instance_name)
     namespace = Keyword.get(opts, :namespace, "slackbot:event_buffer")
     ttl_ms = Keyword.get(opts, :ttl_ms, @default_ttl)
+    redix = Keyword.get(opts, :redix, Redix)
 
     conn =
       case Keyword.fetch(opts, :conn) do
@@ -32,12 +37,13 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
 
         :error ->
           redis_opts = Keyword.get(opts, :redis, [])
-          {:ok, pid} = Redix.start_link(redis_opts)
+          {:ok, pid} = redix.start_link(redis_opts)
           pid
       end
 
     state = %{
       conn: conn,
+      redix: redix,
       instance: instance,
       namespace: namespace,
       ttl_ms: ttl_ms
@@ -53,23 +59,29 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
     ttl_arg = Integer.to_string(state.ttl_ms)
     now = now_ms()
 
-    case command!(state, ["SET", entry_key, encoded, "PX", ttl_arg, "NX"]) do
+    case command(state, ["SET", entry_key, encoded, "PX", ttl_arg, "NX"]) do
       {:ok, "OK"} ->
-        pipeline!(state, [
-          ["ZADD", pending_key(state), now, entry_key],
-          ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now - state.ttl_ms]
-        ])
+        _ =
+          pipeline(state, [
+            ["ZADD", pending_key(state), now, entry_key],
+            ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now - state.ttl_ms]
+          ])
 
         {:ok, state}
 
       {:ok, nil} ->
-        pipeline!(state, [
-          ["PEXPIRE", entry_key, ttl_arg],
-          ["ZADD", pending_key(state), now, entry_key],
-          ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now - state.ttl_ms]
-        ])
+        _ =
+          pipeline(state, [
+            ["PEXPIRE", entry_key, ttl_arg],
+            ["ZADD", pending_key(state), now, entry_key],
+            ["ZREMRANGEBYSCORE", pending_key(state), "-inf", now - state.ttl_ms]
+          ])
 
         {:duplicate, state}
+
+      {:error, reason} ->
+        log_error(:record, reason, state)
+        {:ok, state}
     end
   end
 
@@ -77,50 +89,45 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
   def delete(state, key) do
     entry_key = entry_key(state, key)
 
-    pipeline!(state, [
-      ["DEL", entry_key],
-      ["ZREM", pending_key(state), entry_key]
-    ])
+    case pipeline(state, [
+           ["DEL", entry_key],
+           ["ZREM", pending_key(state), entry_key]
+         ]) do
+      {:ok, _} ->
+        {:ok, state}
 
-    {:ok, state}
+      {:error, reason} ->
+        log_error(:delete, reason, state)
+        {:ok, state}
+    end
   end
 
   @impl true
   def seen?(state, key) do
-    case command!(state, ["EXISTS", entry_key(state, key)]) do
-      {:ok, 1} -> {true, state}
-      {:ok, 0} -> {false, state}
+    case command(state, ["EXISTS", entry_key(state, key)]) do
+      {:ok, 1} ->
+        {true, state}
+
+      {:ok, 0} ->
+        {false, state}
+
+      {:error, reason} ->
+        log_error(:seen?, reason, state)
+        {false, state}
     end
   end
 
   @impl true
   def pending(state) do
     prune_before = now_ms() - max(state.ttl_ms, @prune_window)
-    _ = command!(state, ["ZREMRANGEBYSCORE", pending_key(state), "-inf", prune_before])
 
-    case command!(state, ["ZRANGE", pending_key(state), 0, -1]) do
-      {:ok, []} ->
+    case command(state, ["ZREMRANGEBYSCORE", pending_key(state), "-inf", prune_before]) do
+      {:ok, _} ->
+        do_pending(state)
+
+      {:error, reason} ->
+        log_error(:pending, reason, state)
         {[], state}
-
-      {:ok, keys} ->
-        {:ok, values} = command!(state, ["MGET" | keys])
-
-        payloads =
-          keys
-          |> Enum.zip(values)
-          |> Enum.reduce([], fn
-            {_key, nil}, acc ->
-              acc
-
-            {_key, value}, acc ->
-              case decode(value) do
-                {:ok, %{payload: payload}} -> [payload | acc]
-                _ -> acc
-              end
-          end)
-          |> Enum.reverse()
-
-        {payloads, state}
     end
   end
 
@@ -132,19 +139,9 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
     "#{namespace}:#{instance}:pending"
   end
 
-  defp command!(state, command) do
-    case Redix.command(state.conn, command) do
-      {:ok, _} = ok -> ok
-      {:error, reason} -> raise "Redis adapter failed: #{inspect(reason)}"
-    end
-  end
+  defp command(state, command), do: state.redix.command(state.conn, command)
 
-  defp pipeline!(state, commands) do
-    case Redix.pipeline(state.conn, commands) do
-      {:ok, _} -> :ok
-      {:error, reason} -> raise "Redis adapter failed: #{inspect(reason)}"
-    end
-  end
+  defp pipeline(state, commands), do: state.redix.pipeline(state.conn, commands)
 
   defp decode(value) when is_binary(value) do
     try do
@@ -152,6 +149,48 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
     rescue
       _ -> :error
     end
+  end
+
+  defp do_pending(state) do
+    case command(state, ["ZRANGE", pending_key(state), 0, -1]) do
+      {:ok, []} ->
+        {[], state}
+
+      {:ok, keys} ->
+        case command(state, ["MGET" | keys]) do
+          {:ok, values} ->
+            payloads =
+              keys
+              |> Enum.zip(values)
+              |> Enum.reduce([], fn
+                {_key, nil}, acc ->
+                  acc
+
+                {_key, value}, acc ->
+                  case decode(value) do
+                    {:ok, %{payload: payload}} -> [payload | acc]
+                    _ -> acc
+                  end
+              end)
+              |> Enum.reverse()
+
+            {payloads, state}
+
+          {:error, reason} ->
+            log_error(:pending, reason, state)
+            {[], state}
+        end
+
+      {:error, reason} ->
+        log_error(:pending, reason, state)
+        {[], state}
+    end
+  end
+
+  defp log_error(operation, reason, %{instance: instance}) do
+    Logger.warning(
+      "[SlackBot] Redis event buffer error operation=#{inspect(operation)} instance=#{inspect(instance)} reason=#{inspect(reason)}"
+    )
   end
 
   defp now_ms, do: System.monotonic_time(:millisecond)
