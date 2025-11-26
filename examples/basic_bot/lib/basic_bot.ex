@@ -12,6 +12,39 @@ defmodule BasicBot do
     respond(event["channel"], "Hi <@#{event["user"]}>! Try `/demo list short fleet` or `/demo help`.", ctx)
   end
 
+  handle_event "block_actions", payload, _ctx do
+    case payload["actions"] do
+      [%{"value" => "demo-1"} | _rest] ->
+        channel = channel_from_payload(payload)
+        ts = message_ts_from_payload(payload)
+
+        if channel && ts do
+          blocks =
+            SlackBot.Blocks.build(BasicBot.SlackBot, fn ->
+              [
+                SlackBot.Blocks.section("✅ Thanks for clicking, <@#{payload["user"]["id"]}>!"),
+                SlackBot.Blocks.context([
+                  "BasicBot updated this card in place to confirm the action.",
+                  "Try running `/demo blocks` again to see the original card."
+                ])
+              ]
+            end)
+
+          body = %{
+            channel: channel,
+            ts: ts,
+            text: "BasicBot Block Kit demo (clicked)",
+            blocks: blocks
+          }
+
+          SlackBot.push(BasicBot.SlackBot, {"chat.update", body})
+        end
+
+      _ ->
+        :ok
+    end
+  end
+
   slash "/demo", ack: :ephemeral do
     grammar do
       choice do
@@ -129,6 +162,14 @@ defmodule BasicBot do
     `/demo async-demo` - send a series of async messages followed by a final one.
     """
   end
+
+  defp channel_from_payload(%{"channel" => %{"id" => id}}), do: id
+  defp channel_from_payload(%{"container" => %{"channel_id" => id}}), do: id
+  defp channel_from_payload(_), do: nil
+
+  defp message_ts_from_payload(%{"container" => %{"message_ts" => ts}}), do: ts
+  defp message_ts_from_payload(%{"message" => %{"ts" => ts}}), do: ts
+  defp message_ts_from_payload(_), do: nil
 
   defp format_response(%{mode: :list} = parsed) do
     tags = parsed |> Map.get(:tags, []) |> Enum.join(", ")
