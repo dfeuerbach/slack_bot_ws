@@ -56,6 +56,9 @@ When the bot is in a channel:
 
 The bot also replies to `@mention` events with instructions.
 
+> If `BlockBox` is not in this example app's deps, you'll see a single warning about falling back
+> to map helpers when you run `/demo blocks`. This is expected and safe.
+
 ## Diagnostics
 
 Diagnostics are enabled by default (buffer size 200). From `iex -S mix` you can inspect
