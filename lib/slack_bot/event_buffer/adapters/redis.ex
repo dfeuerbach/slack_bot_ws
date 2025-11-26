@@ -14,6 +14,7 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
   """
 
   @behaviour SlackBot.EventBuffer.Adapter
+  @compile {:no_warn_undefined, Redix}
 
   @default_ttl 5 * 60_000
   @prune_window 10 * 60_000
