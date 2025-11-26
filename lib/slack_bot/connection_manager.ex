@@ -56,6 +56,17 @@ defmodule SlackBot.ConnectionManager do
     connect(state)
   end
 
+  def handle_info({:slackbot, :healthcheck_failed, reason}, state) do
+    Logger.warning("[SlackBot] healthcheck failed, reconnecting: #{inspect(reason)}")
+
+    Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{
+      state: :healthcheck_failed,
+      reason: reason
+    })
+
+    reset_transport(state, {:healthcheck_failed, reason})
+  end
+
   def handle_info({:slackbot, :connected, pid}, state) do
     Logger.debug("[SlackBot] connected via #{inspect(pid)}")
     Telemetry.execute(state.config, [:connection, :state], %{count: 1}, %{state: :connected})
@@ -193,8 +204,7 @@ defmodule SlackBot.ConnectionManager do
       Process.demonitor(state.transport_ref, [:flush])
     end
 
-    send(self(), :connect)
-    {:noreply, %{state | transport_pid: nil, transport_ref: nil}}
+    schedule_reconnect(%{state | transport_pid: nil, transport_ref: nil}, backoff_delay(state))
   end
 
   defp schedule_reconnect(state, delay_ms) do

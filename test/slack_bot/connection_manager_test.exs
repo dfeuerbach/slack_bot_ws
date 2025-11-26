@@ -19,7 +19,8 @@ defmodule SlackBot.ConnectionManagerTest do
       transport_opts: [notify: self()],
       http_client: SlackBot.TestHTTP,
       assigns: %{test_pid: self()},
-      instance_name: instance
+      instance_name: instance,
+      backoff: %{min_ms: 5, max_ms: 5, max_attempts: :infinity, jitter_ratio: 0.0}
     ]
 
     {:ok, _} = start_supervised({SlackBot.ConfigServer, name: :cm_config, config: config_opts})
@@ -100,6 +101,18 @@ defmodule SlackBot.ConnectionManagerTest do
   test "reconnects when Slack sends a disconnect", %{transport: transport_pid} do
     capture_log(fn ->
       SlackBot.TestTransport.disconnect(transport_pid, %{"reason" => "refresh"})
+
+      assert_receive {:test_transport, new_pid}
+      assert is_pid(new_pid)
+      refute new_pid == transport_pid
+    end)
+  end
+
+  test "reconnects when a healthcheck failure is reported", %{transport: transport_pid} do
+    manager = :cm_manager
+
+    capture_log(fn ->
+      send(manager, {:slackbot, :healthcheck_failed, :econnrefused})
 
       assert_receive {:test_transport, new_pid}
       assert is_pid(new_pid)
