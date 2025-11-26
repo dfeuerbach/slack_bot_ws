@@ -2,7 +2,7 @@
 
 ![SlackBot WS](docs/images/slackbot_ws_logo.png)
 
-SlackBot is a socket-mode client for building resilient Slack automations in Elixir. It focuses on fast acknowledgements, supervised event handling, deterministic slash-command parsing, and a developer-friendly configuration surface.
+SlackBot is a Socket Mode toolkit for building resilient Slack bots in Elixir. It focuses on fast slash-command acknowledgements, supervised event handling, deterministic command parsing, and a configuration surface that stays simple for single bots while scaling to multi-bot, multi-node deployments.
 
 ## Highlights
 - Supervised WebSocket connection manager with rate-limit aware backoff and robust, HTTP-based health monitoring
