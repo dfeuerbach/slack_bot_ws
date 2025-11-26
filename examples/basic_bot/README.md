@@ -8,7 +8,8 @@ This sample Mix project shows how to wire SlackBot into an OTP application with:
 - auto-ack strategies (`:ephemeral` + `{:custom, fun}`),
 - optional BlockBox helpers (falls back to map builders if not installed),
 - explicit ephemeral messaging and async Web API usage,
-- robust connection health monitoring and automatic reconnects via the library’s HTTP-based health checks.
+- robust connection health monitoring and automatic reconnects via the library’s HTTP-based health checks,
+- per-channel Web API rate limiting using the library’s default rate limiter.
 
 ## Prerequisites
 
@@ -37,6 +38,30 @@ The example uses the same `otp_app` pattern as the main README:
 - `BasicBot.SlackBot` is the SlackBot entrypoint (`use SlackBot, otp_app: :basic_bot`).
 - `BasicBot` defines the router with handlers, middleware, and slash grammars.
 - `BasicBot.Application` supervises `BasicBot.SlackBot` directly.
+
+Per-channel/per-workspace Web API rate limiting is **enabled by default** via the
+library’s ETS-backed rate limiter—no extra configuration is required in this
+example. Outbound calls made via `SlackBot.push/2` and `SlackBot.push_async/2`
+are serialized per channel for common chat methods (`chat.postMessage`,
+`chat.update`, `chat.delete`, `chat.scheduleMessage`, `chat.postEphemeral`),
+with a workspace-level key for other methods. Slack `429` responses and
+`Retry-After` headers drive the blocking window.
+
+To observe rate limiting in action from `iex -S mix`, you can attach a simple
+Telemetry handler:
+
+```elixir
+handler_id = {:basic_bot_rate_limiter, make_ref()}
+
+:telemetry.attach(
+  handler_id,
+  [:slackbot, :rate_limiter, :decision],
+  fn event, measurements, metadata, _ ->
+    IO.inspect({event, measurements, metadata}, label: "rate_limiter")
+  end,
+  nil
+)
+```
 
 ## Slash Commands to Try
 

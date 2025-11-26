@@ -5,7 +5,7 @@
 SlackBot is a Socket Mode toolkit for building resilient Slack bots in Elixir. It focuses on fast slash-command acknowledgements, supervised event handling, deterministic command parsing, and a configuration surface that stays simple for single bots while scaling to multi-bot, multi-node deployments.
 
 ## Highlights
-- Supervised WebSocket connection manager with rate-limit aware backoff and robust, HTTP-based health monitoring
+- Supervised WebSocket connection manager with rate-limit aware backoff, robust HTTP-based health monitoring, and default per-workspace/per-channel Web API rate limiting that follows Slack’s prescribed limits
 - Task-based event fan-out with dedupe and replay safeguards
 - Pluggable cache/event buffer adapters (ETS by default, Redis adapter included for multi-node dedupe)
 - Declarative router DSL for events and shortcuts with first-class middleware (`handle_event`, `middleware`, `slash`, etc.)
@@ -75,9 +75,9 @@ Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
 With just those three pieces (module, config, supervision), SlackBot boots a Socket Mode connection
-with sensible defaults for backoff, heartbeats, ETS-backed cache + event buffer, telemetry prefix,
-diagnostics (off by default), and slash-command acknowledgement strategy. You can refine those via
-advanced configuration once you are comfortable with the basics.
+with sensible defaults for backoff, heartbeats, ETS-backed cache + event buffer, per-workspace/per-channel
+Web API rate limiting, telemetry prefix, diagnostics (off by default), and slash-command acknowledgement
+strategy. You can refine those via advanced configuration once you are comfortable with the basics.
 
 ## Advanced configuration
 
@@ -111,6 +111,29 @@ override any of the following keys under your bot module’s config:
       {:adapter, SlackBot.EventBuffer.Adapters.Redis,
        redis: [host: "127.0.0.1", port: 6379], namespace: "slackbot"}
     ```
+
+- **Rate limiting**
+  - **`rate_limiter`**: per-channel/per-workspace Web API shaping (enabled by default):
+
+    ```elixir
+    # default (no explicit config): ETS-backed rate limiter with library defaults
+
+    # disable rate limiting entirely:
+    rate_limiter: :none
+
+    # customize adapter options (for example, ETS table name and TTL):
+    rate_limiter:
+      {:adapter, SlackBot.RateLimiter.Adapters.ETS,
+       table: :my_bot_rate_limiter, ttl_ms: 10 * 60_000}
+    ```
+
+    When enabled (the default), outbound calls made via `SlackBot.push/2` and `push_async/2`
+    are serialized per channel for common chat methods (`chat.postMessage`, `chat.update`,
+    `chat.delete`, `chat.scheduleMessage`, `chat.postEphemeral`), with a workspace-level
+    key for other methods. Slack `429` responses and `Retry-After` headers drive the
+    blocking window so you stay within Slack’s prescribed per-channel and per-workspace
+    limits; the ETS adapter is suitable for single-node or per-node shaping, while
+    custom adapters can coordinate state across nodes (for example via Redis).
 
 - **Slash-command acknowledgements**
   - **`ack_mode`**: `:silent` (default), `:ephemeral`, or `{:custom, (map(), SlackBot.Config.t() -> any())}`.
