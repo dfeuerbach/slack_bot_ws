@@ -35,6 +35,7 @@ SlackBot.Supervisor
 ├─ SlackBot.ConnectionManager     # WebSockex client, backs off via apps.connections.open
 ├─ SlackBot.TaskSupervisor        # PartitionSupervisor + Task.Supervisor per connection
 ├─ SlackBot.EventBuffer           # behaviour; ETS default + custom adapters (Redis, etc.)
+├─ SlackBot.TierLimiter           # Slack tier-aware request pacing per workspace/channel
 ├─ SlackBot.Cache.Provider        # read-through provider (channels, users, ims)
 ├─ SlackBot.Cache.Mutations       # mutation queue to satisfy Ratatouille conventions
 ├─ SlackBot.CommandRouter         # NimbleParsec-powered slash/message parsing + dispatch
@@ -53,10 +54,22 @@ SlackBot.Supervisor
 - Failed pings emit `[:slackbot, :healthcheck, :ping]` Telemetry and, for network errors, notify the connection manager to reset the transport using the existing backoff logic.
 - Rate limits and fatal auth errors are surfaced via Telemetry but do not cause aggressive reconnect loops on their own.
 
+### Tier & Rate Limiting
+- `SlackBot.TierLimiter` enforces Slack’s published per-method quotas (Tier 1–4, special tiers)
+  **before** requests reach the traditional `SlackBot.RateLimiter`. Each instance keeps per-workspace
+  token buckets with configurable burst capacity and initial fill ratios so long-running jobs
+  (for example the metadata sync) naturally pace themselves to shared budgets—`users.list` and
+  `users.conversations` live in the same `:metadata_catalog` group—without relying on Slack’s
+  429 responses or spiking during cold starts.
+- The existing `SlackBot.RateLimiter` still handles per-channel serialization and honours Slack’s
+  `Retry-After` guidance; combining both layers means requests trickle out steadily while respecting
+  any temporary backoffs returned by Slack.
+
 ### Event Buffer & Caching
 - `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks now center on `record(key, payload) :: {:ok | :duplicate, state}`, `delete/2`, `seen?/2`, and `pending/1`, letting the connection manager dedupe envelopes in a single RPC.
 - Redis adapter ships with the toolkit (powered by `Redix`) so envelope dedupe/replay can be shared across nodes without additional plumbing.
 - `SlackBot.Cache` exposes an adapter behaviour with `channels/2`, `users/2`, `metadata/2`, and `mutate/3`; the default ETS provider/mutation queue remains available, but you can plug Redis or any datastore while benefiting from the same public API. Set `mode: :async` inside the adapter opts when you want cache writes to be fire-and-forget.
+- User entries are read-through with a one-hour TTL by default (`SlackBot.Cache.fetch_user/2` refreshes stale or missing records) and a supervised janitor removes expired rows on a configurable cadence. The full `users.list` background sync is now optional; channel membership sync remains enabled by default.
 
 ### Command Router & Parsing
 - NimbleParsec baked in (non-optional). Default combinators handle:
@@ -95,7 +108,7 @@ SlackBot.Supervisor
 - **BlockBox integration (optional)**:
   - Configure `%SlackBot.Config{block_builder: {:blockbox, opts}}` and call `SlackBot.Blocks.build/2` to run BlockBox’s DSL when the dependency is present.
   - Graceful fallback to map helpers (`SlackBot.Blocks.section/2`, `button/2`, etc.) when BlockBox isn’t installed.
-- **Slash command auto-ack**: global/per-command `:silent | :ephemeral | {:custom, fun}` strategies. The `:ephemeral` option automatically posts “Processing…” via the slash `response_url`.
+- **Slash command auto-ack**: global/per-command `:silent | :ephemeral | {:custom, fun}` strategies. `:silent` is the default so no placeholder is sent unless you opt in; the `:ephemeral` option automatically posts “Processing…” via the slash `response_url`.
 - **Replay/simulation**: diagnostics ring buffer + `SlackBot.Diagnostics.replay/2` feed captured events back through the router for deterministic debugging.
 - **Telemetry & LiveDashboard**: `docs/telemetry_dashboard.md` explains how to hook the emitted events to LiveDashboard metrics or plain Telemetry handlers so teams can chart connection health without Phoenix dependencies baked into SlackBot.
 - **Examples**: `examples/basic_bot` demonstrates slash DSL grammars, middleware, diagnostics replay, and auto-ack in a runnable Mix project.

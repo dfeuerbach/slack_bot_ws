@@ -86,4 +86,50 @@ defmodule SlackBot.APITest do
     assert {:error, {:slack_error, "invalid_auth"}} =
              API.post(config(), "chat.postMessage", %{"text" => "hi"})
   end
+
+  test "post/2 respects configured tier limits" do
+    Application.put_env(:slack_bot_ws, SlackBot.TierRegistry,
+      tiers: %{"chat.postMessage" => %{max_calls: 1, window_ms: 80, scope: :workspace}}
+    )
+
+    on_exit(fn -> Application.delete_env(:slack_bot_ws, SlackBot.TierRegistry) end)
+
+    config = config()
+
+    start_supervised!(SlackBot.TierLimiter.child_spec(config))
+
+    parent = self()
+
+    handler = fn _opts ->
+      send(parent, {:http_call, System.monotonic_time(:millisecond)})
+      {:ok, %{body: %{"ok" => true, "result" => "ok"}}}
+    end
+
+    Process.put(:req_test_handler, handler)
+
+    assert {:ok, %{"result" => "ok"}} =
+             API.post(config, "chat.postMessage", %{"channel" => "C", "text" => "one"})
+
+    t1 =
+      receive do
+        {:http_call, ts} -> ts
+      end
+
+    task =
+      Task.async(fn ->
+        Process.put(:req_test_handler, handler)
+        API.post(config, "chat.postMessage", %{"channel" => "C", "text" => "two"})
+      end)
+
+    refute Task.yield(task, 10)
+
+    assert {:ok, %{"result" => "ok"}} = Task.await(task, 200)
+
+    t2 =
+      receive do
+        {:http_call, ts} -> ts
+      end
+
+    assert t2 - t1 >= 60
+  end
 end

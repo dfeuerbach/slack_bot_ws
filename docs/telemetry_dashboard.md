@@ -11,6 +11,7 @@ to those events and surface them in Phoenix LiveDashboard (or any Telemetry cons
 | `[:slackbot, :connection, :state]` | `%{count: 1}` | `%{state: :connected | :disconnected | :terminated | :down | :error, reason: term()}` |
 | `[:slackbot, :connection, :rate_limited]` | `%{delay_ms: integer}` | `%{}` |
 | `[:slackbot, :healthcheck, :ping]` | `%{duration: native} / %{delay_ms: integer}` | `%{status: :ok | :error | :fatal | :rate_limited, reason: term()}` |
+| `[:slackbot, :tier_limiter, :decision]` | `%{count: 1, queue_length: integer}` | `%{method: String.t(), scope_key: term(), decision: :allow | :queue}` |
 | `[:slackbot, :handler, :dispatch, :start/:stop]` (Telemetry span) | `%{system_time: native}` | `%{type: event_type}` |
 | `[:slackbot, :diagnostics, :record]` | `%{count: 1}` | `%{direction: :inbound | :outbound}` |
 | `[:slackbot, :diagnostics, :replay]` | `%{count: integer}` | `%{filters: map()}` |
@@ -52,6 +53,15 @@ defmodule MyAppWeb.Telemetry do
         description: "Diagnostics replays issued",
         measurement: :count
       ),
+      counter(@slackbot_prefix ++ [:tier_limiter, :decision],
+        tags: [:method, :decision],
+        description: "Tier limiter decisions by API method"
+      ),
+      last_value(@slackbot_prefix ++ [:tier_limiter, :decision],
+        unit: :event,
+        description: "Tier limiter queue length",
+        measurement: :queue_length
+      ),
       summary(@slackbot_prefix ++ [:handler, :dispatch, :duration],
         unit: {:native, :millisecond},
         description: "Handler execution time"
@@ -60,6 +70,10 @@ defmodule MyAppWeb.Telemetry do
   end
 end
 ```
+
+The tier limiter metrics let you spot when Slack’s published quotas are nearing their cap.
+`queue_length` spikes mean requests are waiting for the bucket to refill, and you can drill
+into the tagged `decision` counter to see which methods are being throttled.
 
 > **Note:** Telemetry spans emit `:start`/`:stop` events. Phoenix LiveDashboard expects a
 > `summary` metric built from the `:stop` event where `measurement: :duration`. The

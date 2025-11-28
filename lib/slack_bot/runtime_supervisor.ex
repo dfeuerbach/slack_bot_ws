@@ -30,8 +30,10 @@ defmodule SlackBot.RuntimeSupervisor do
     children =
       []
       |> Kernel.++(SlackBot.Cache.child_specs(config))
-      |> Kernel.++([SlackBot.EventBuffer.child_spec(config)])
+      |> Kernel.++(tier_limiter_child_specs(config))
       |> Kernel.++(rate_limiter_child_specs(config))
+      |> Kernel.++([SlackBot.EventBuffer.child_spec(config)])
+      |> Kernel.++(cache_sync_child_specs(config, base_name, config_server))
       |> Kernel.++([SlackBot.Diagnostics.child_spec(config)])
       |> Kernel.++([
         {Finch, name: ack_pool_name},
@@ -58,5 +60,34 @@ defmodule SlackBot.RuntimeSupervisor do
 
   defp rate_limiter_child_specs(%SlackBot.Config{} = config) do
     [SlackBot.RateLimiter.child_spec(config)]
+  end
+
+  defp tier_limiter_child_specs(%SlackBot.Config{} = config) do
+    [SlackBot.TierLimiter.child_spec(config)]
+  end
+
+  defp cache_sync_child_specs(
+         %SlackBot.Config{cache_sync: %{enabled: false}},
+         _base_name,
+         _config
+       ),
+       do: []
+
+  defp cache_sync_child_specs(%SlackBot.Config{cache_sync: cache_sync}, base_name, config_server) do
+    if cache_sync.enabled do
+      name = Module.concat(base_name, CacheSyncSupervisor)
+
+      [
+        %{
+          id: name,
+          start:
+            {SlackBot.Cache.Sync, :start_link,
+             [[name: name, config_server: config_server, base_name: base_name]]},
+          type: :supervisor
+        }
+      ]
+    else
+      []
+    end
   end
 end

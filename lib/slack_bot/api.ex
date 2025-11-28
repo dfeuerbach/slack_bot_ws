@@ -4,17 +4,22 @@ defmodule SlackBot.API do
   @slack_base "https://slack.com/api/"
 
   alias SlackBot.Config
+  alias SlackBot.TierLimiter
+  require Logger
 
   @spec apps_connections_open(Config.t()) ::
           {:ok, String.t()}
           | {:rate_limited, non_neg_integer()}
           | {:error, term()}
   def apps_connections_open(%Config{} = config) do
+    :ok = TierLimiter.acquire(config, "apps.connections.open", %{})
+
     case post_with_token(config, config.app_token, "apps.connections.open", %{}) do
       {:ok, %{"url" => url}} ->
         {:ok, url}
 
       {:error, {:rate_limited, secs}} ->
+        TierLimiter.suspend(config, "apps.connections.open", %{}, secs * 1_000)
         {:rate_limited, secs}
 
       {:error, reason} ->
@@ -27,7 +32,16 @@ defmodule SlackBot.API do
           | {:error, {:rate_limited, non_neg_integer()}}
           | {:error, term()}
   def post(%Config{} = config, method, body) when is_binary(method) and is_map(body) do
-    post_with_token(config, config.bot_token, method, body)
+    :ok = TierLimiter.acquire(config, method, body)
+
+    case post_with_token(config, config.bot_token, method, body) do
+      {:error, {:rate_limited, secs}} = error ->
+        TierLimiter.suspend(config, method, body, secs * 1_000)
+        error
+
+      other ->
+        other
+    end
   end
 
   defp post_with_token(%Config{} = config, token, method, body) when is_binary(method) do
@@ -55,11 +69,25 @@ defmodule SlackBot.API do
   defp interpret_response(%{"ok" => true} = body, _response), do: {:ok, body}
 
   defp interpret_response(%{"ok" => false, "error" => "ratelimited"} = body, response) do
+    header_retry_after =
+      case response do
+        %{headers: headers} ->
+          headers
+          |> Enum.find_value(fn {k, v} -> if String.downcase(k) == "retry-after", do: v end)
+
+        _ ->
+          nil
+      end
+
+    body_retry_after = body["retry_after"]
+
+    raw_retry_after = body_retry_after || header_retry_after
+
     retry_after =
-      body["retry_after"] ||
-        response.headers
-        |> Enum.find_value(fn {k, v} -> if String.downcase(k) == "retry-after", do: v end)
-        |> to_integer(1)
+      case raw_retry_after do
+        [value | _] -> to_integer(value, 1)
+        value -> to_integer(value, 1)
+      end
 
     {:error, {:rate_limited, retry_after}}
   end

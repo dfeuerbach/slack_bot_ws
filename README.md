@@ -135,8 +135,29 @@ override any of the following keys under your bot module’s config:
     limits; the ETS adapter is suitable for single-node or per-node shaping, while
     custom adapters can coordinate state across nodes (for example via Redis).
 
+    Slack’s per-method **tier quotas** are also enforced automatically (for example
+    `users.list` and `users.conversations` share Tier 2’s “20 per minute” budget so cache
+    syncs queue instead of hammering Slack).
+    You can override or extend the tier table by configuring `SlackBot.TierRegistry`:
+
+    ```elixir
+    config :slack_bot_ws, SlackBot.TierRegistry,
+      tiers: %{
+        "users.list" => %{max_calls: 10, window_ms: 45_000},
+        "users.conversations" => %{group: :metadata_catalog}
+      }
+    ```
+
+    Each entry supports `:max_calls`, `:window_ms`, `:scope` (`:workspace` or `{:channel, field}`),
+    `:group` (to share a token bucket across related methods), optional `:capacity` or `:burst_ratio`
+    (additional burst headroom, defaults to 25%), `:initial_fill_ratio` (defaults to 0.5 so new
+    buckets start half full), and `:tier` (purely informational). Any method not listed falls back
+    to the built-in defaults.
+
 - **Slash-command acknowledgements**
   - **`ack_mode`**: `:silent` (default), `:ephemeral`, or `{:custom, (map(), SlackBot.Config.t() -> any())}`.
+    `:silent` avoids sending the “Processing…” placeholder, so slash commands only post their
+    final response unless you explicitly opt-in to `:ephemeral` (globally or per command).
   - **`assigns`**: you can set `:slash_ack_text` to customize the ephemeral text and
     `:bot_user_id` to help the cache track channel membership for the bot user.
 
@@ -148,6 +169,53 @@ override any of the following keys under your bot module’s config:
     ```
 
     See `SlackBot.Diagnostics` and `docs/diagnostics.md` for how to list, clear, and replay entries.
+
+- **Metadata cache & background sync**
+  - **`cache_sync`**: periodically populate the cache with users and channels using Slack Web API:
+
+    ```elixir
+    # defaults (enabled with both users and channels)
+    config :my_app, MyApp.SlackBot,
+      app_token: System.fetch_env!("SLACK_APP_TOKEN"),
+      bot_token: System.fetch_env!("SLACK_BOT_TOKEN"),
+      cache_sync: [
+        enabled: true,
+        kinds: [:channels],
+        interval_ms: :timer.hours(1)
+      ]
+
+    # disable or narrow the sync as needed:
+    config :my_app, MyApp.SlackBot,
+      cache_sync: [enabled: false]
+
+    config :my_app, MyApp.SlackBot,
+      cache_sync: [
+        enabled: true,
+        kinds: [:users],
+        users_conversations_opts: [types: "public_channel,private_channel"]
+      ]
+    ```
+
+    When enabled (the default), `SlackBot.Cache.channels/1` reflects both real-time events and
+    the periodic background sync (`users.conversations`) so joined-channel information stays
+    current. User data is now populated on demand via `SlackBot.Cache.fetch_user/2` with a
+    one-hour TTL by default, so your handlers always see fresh metadata without waiting for a
+    full `users.list` pass. Helper functions such as `SlackBot.Cache.get_user/2`,
+    `find_user/2`, `get_channel/2`, and `find_channel/2` make it easy to look up entities by ID,
+    email, or name.
+
+    ```elixir
+    # customize user cache TTL / cleanup cadence
+    config :my_app, MyApp.SlackBot,
+      user_cache: [
+        ttl_ms: :timer.hours(1),
+        cleanup_interval_ms: :timer.minutes(5)
+      ]
+    ```
+    Set `assigns: %{bot_user_id: "U123"}` in your bot configuration for zero-cost channel
+    syncs, or let SlackBot call `auth.test` on-demand to discover the bot identity before
+    issuing `users.conversations`. Use `users_conversations_opts` to pass Slack parameters
+    like `types`, `limit`, or `exclude_archived` when you need to narrow the sync.
 
 - **Web API pooling**
   - **`api_pool_opts`**: forwarded to Finch for Web API requests:
