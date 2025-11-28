@@ -75,7 +75,11 @@ defmodule SlackBot do
   """
   @spec push(GenServer.server(), {String.t(), map()}) :: {:ok, map()} | {:error, term()}
   def push(server \\ __MODULE__, {method, body}) when is_binary(method) and is_map(body) do
-    config = config(server)
+    config =
+      case server do
+        %Config{} = config -> config
+        _ -> config(server)
+      end
 
     RateLimiter.around_request(config, method, body, fn ->
       start = System.monotonic_time()
