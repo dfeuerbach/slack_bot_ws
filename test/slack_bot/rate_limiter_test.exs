@@ -89,6 +89,59 @@ defmodule SlackBot.RateLimiterTest do
       assert :ok = Task.await(task1)
       assert :ok = Task.await(task2)
     end
+
+    test "detects channel keys when payload uses atoms" do
+      instance = __MODULE__.AtomChannelInstance
+
+      config =
+        base_config(
+          instance_name: instance,
+          rate_limiter: {:adapter, ETS, table: :rate_limiter_atom_table}
+        )
+
+      start_supervised!(RateLimiter.child_spec(config))
+
+      parent = self()
+
+      fun = fn label ->
+        send(parent, {:start, label, self()})
+
+        receive do
+          {:continue, ^label} -> :ok
+        end
+      end
+
+      task1 =
+        Task.async(fn ->
+          RateLimiter.around_request(
+            config,
+            "chat.postMessage",
+            %{channel: "C-atom"},
+            fn -> fun.(:one) end
+          )
+        end)
+
+      task2 =
+        Task.async(fn ->
+          RateLimiter.around_request(
+            config,
+            "chat.postMessage",
+            %{channel: "C-atom"},
+            fn -> fun.(:two) end
+          )
+        end)
+
+      assert_receive {:start, label1, pid1}
+      refute_receive {:start, _label, _pid}, 50
+
+      send(pid1, {:continue, label1})
+
+      assert_receive {:start, label2, pid2}
+      send(pid2, {:continue, label2})
+
+      assert :ok = Task.await(task1)
+      assert :ok = Task.await(task2)
+    end
   end
 
   describe "telemetry" do
@@ -144,7 +197,11 @@ defmodule SlackBot.RateLimiterTest do
 
       assert_receive {:telemetry, [:slackbot, :rate_limiter, :decision],
                       %{queue_length: 0, in_flight: 1},
-                      %{key: {:channel, "C-telemetry"}, method: "chat.postMessage", decision: :allow}}
+                      %{
+                        key: {:channel, "C-telemetry"},
+                        method: "chat.postMessage",
+                        decision: :allow
+                      }}
 
       assert_receive {:telemetry, [:slackbot, :api, :rate_limited],
                       %{retry_after_ms: 2000, observed_at_ms: _},

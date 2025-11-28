@@ -50,8 +50,9 @@ defmodule SlackBot.RateLimiter do
 
   When `rate_limiter: :none`, `fun` is executed directly.
   """
-  @spec around_request(Config.t(), String.t(), map(), (() -> term())) :: term()
-  def around_request(%Config{rate_limiter: :none}, _method, _body, fun) when is_function(fun, 0) do
+  @spec around_request(Config.t(), String.t(), map(), (-> term())) :: term()
+  def around_request(%Config{rate_limiter: :none}, _method, _body, fun)
+      when is_function(fun, 0) do
     fun.()
   end
 
@@ -91,9 +92,12 @@ defmodule SlackBot.RateLimiter do
       config: config,
       adapter: adapter,
       adapter_state: adapter_state,
-      queues: %{},           # key => :queue.from_list([from, ...])
-      in_flight: %{},        # key => non_neg_integer()
-      release_timers: %{}    # key => reference()
+      # key => :queue.from_list([from, ...])
+      queues: %{},
+      # key => non_neg_integer()
+      in_flight: %{},
+      # key => reference()
+      release_timers: %{}
     }
 
     {:ok, state}
@@ -279,12 +283,15 @@ defmodule SlackBot.RateLimiter do
   defp unwrap_result(result), do: result
 
   defp classify_request(method, body) when is_binary(method) and is_map(body) do
-    cond do
-      method in @channel_methods and is_binary(Map.get(body, "channel")) ->
-        {:channel, Map.get(body, "channel")}
+    channel =
+      Map.get(body, "channel") ||
+        Map.get(body, :channel) ||
+        Map.get(body, "channel_id") ||
+        Map.get(body, :channel_id)
 
-      method in @channel_methods and is_binary(Map.get(body, "channel_id")) ->
-        {:channel, Map.get(body, "channel_id")}
+    cond do
+      method in @channel_methods and is_binary(channel) ->
+        {:channel, channel}
 
       true ->
         :workspace
