@@ -112,6 +112,16 @@ defmodule SlackBot.Cache do
     * `{:name, name}` – matches against `user["name"]` or `user["profile"]["display_name"]`
       (case-insensitive).
 
+  ## Examples
+
+      iex> config = SlackBot.config(MyApp.SlackBot)
+      iex> SlackBot.Cache.find_user(config, {:email, "alice@example.com"})
+      %{"id" => "U123", "profile" => %{"email" => "alice@example.com"}, ...}
+
+      iex> config = SlackBot.config(MyApp.SlackBot)
+      iex> SlackBot.Cache.find_user(config, {:name, "alice"})
+      %{"id" => "U123", "name" => "alice", ...}
+
   Returns the first matching user map or `nil` when no user matches.
   """
   @spec find_user(
