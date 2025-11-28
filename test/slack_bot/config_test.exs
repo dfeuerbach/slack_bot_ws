@@ -97,6 +97,35 @@ defmodule SlackBot.ConfigTest do
       assert {:error, {:invalid_keyword_option, :api_pool_opts, :invalid}} =
                Config.build(Keyword.put(@valid_opts, :api_pool_opts, :invalid))
     end
+
+    test "builds cache_sync defaults when omitted" do
+      assert {:ok,
+              %Config{
+                cache_sync: %{
+                  enabled: true,
+                  kinds: [:channels],
+                  interval_ms: interval,
+                  page_limit: :infinity,
+                  include_presence: false
+                }
+              }} = Config.build(@valid_opts)
+
+      assert is_integer(interval) and interval > 0
+    end
+
+    test "validates cache_sync options" do
+      assert {:ok, %Config{cache_sync: %{enabled: false}}} =
+               Config.build(Keyword.put(@valid_opts, :cache_sync, false))
+
+      assert {:error, {:invalid_cache_sync_kinds, [:invalid]}} =
+               Config.build(Keyword.put(@valid_opts, :cache_sync, kinds: [:invalid]))
+
+      assert {:error, {:invalid_cache_sync_interval, 0}} =
+               Config.build(Keyword.put(@valid_opts, :cache_sync, interval_ms: 0))
+
+      assert {:error, {:invalid_cache_sync_page_limit, 0}} =
+               Config.build(Keyword.put(@valid_opts, :cache_sync, page_limit: 0))
+    end
   end
 
   describe "build!/1" do

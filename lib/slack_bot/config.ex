@@ -28,13 +28,30 @@ defmodule SlackBot.Config do
     event_buffer: {:ets, []},
     rate_limiter: {:adapter, RateLimiterETS, []},
     block_builder: :none,
-    backoff: %{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity, jitter_ratio: 0.2},
+    backoff: %{
+      min_ms: 1_000,
+      max_ms: 30_000,
+      max_attempts: :infinity,
+      jitter_ratio: 0.2
+    },
     ack_mode: :silent,
     ack_client: AckHTTP,
     api_pool_opts: [],
     diagnostics: %{enabled: false, buffer_size: 200},
     log_level: :info,
-    health_check: %{enabled: true, interval_ms: 30_000}
+    health_check: %{enabled: true, interval_ms: 30_000},
+    user_cache: %{
+      ttl_ms: 3_600_000,
+      cleanup_interval_ms: 300_000
+    },
+    cache_sync: %{
+      enabled: true,
+      interval_ms: 3_600_000,
+      kinds: [:channels],
+      page_limit: :infinity,
+      include_presence: false,
+      users_conversations_opts: %{}
+    }
   ]
 
   @type t :: %__MODULE__{
@@ -68,6 +85,18 @@ defmodule SlackBot.Config do
           health_check: %{
             enabled: boolean(),
             interval_ms: pos_integer()
+          },
+          user_cache: %{
+            ttl_ms: pos_integer(),
+            cleanup_interval_ms: pos_integer()
+          },
+          cache_sync: %{
+            enabled: boolean(),
+            interval_ms: pos_integer(),
+            kinds: [atom()],
+            page_limit: pos_integer() | :infinity,
+            include_presence: boolean(),
+            users_conversations_opts: map()
           }
         }
 
@@ -134,7 +163,9 @@ defmodule SlackBot.Config do
          {:ok, api_pool_opts} <- fetch_keyword(opts, :api_pool_opts, []),
          {:ok, diagnostics} <- fetch_diagnostics(opts),
          {:ok, log_level} <- fetch_log_level(opts),
-         {:ok, health_check} <- fetch_health_check(opts) do
+         {:ok, health_check} <- fetch_health_check(opts),
+         {:ok, user_cache} <- fetch_user_cache(opts),
+         {:ok, cache_sync} <- fetch_cache_sync(opts) do
       {:ok,
        struct!(__MODULE__, %{
          app_token: app_token,
@@ -156,7 +187,9 @@ defmodule SlackBot.Config do
          http_client: http_client,
          assigns: assigns,
          instance_name: Keyword.get(opts, :instance_name),
-         health_check: health_check
+         health_check: health_check,
+         user_cache: user_cache,
+         cache_sync: cache_sync
        })}
     end
   end
@@ -360,8 +393,93 @@ defmodule SlackBot.Config do
     end
   end
 
+  defp fetch_user_cache(opts) do
+    raw = Keyword.get(opts, :user_cache, [])
+    defaults = %{ttl_ms: 3_600_000, cleanup_interval_ms: 300_000}
+
+    map =
+      cond do
+        is_list(raw) -> Map.merge(defaults, Map.new(raw))
+        is_map(raw) -> Map.merge(defaults, raw)
+        true -> defaults
+      end
+
+    with %{ttl_ms: ttl_ms, cleanup_interval_ms: cleanup} = value <- map,
+         true <- positive?(ttl_ms) || {:error, {:invalid_user_cache_ttl, ttl_ms}},
+         true <- positive?(cleanup) || {:error, {:invalid_user_cache_cleanup, cleanup}} do
+      {:ok, value}
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_cache_sync(opts) do
+    raw = Keyword.get(opts, :cache_sync, [])
+
+    defaults = %{
+      enabled: true,
+      interval_ms: 3_600_000,
+      kinds: [:channels],
+      page_limit: :infinity,
+      include_presence: false,
+      users_conversations_opts: %{}
+    }
+
+    map =
+      cond do
+        is_list(raw) -> Map.merge(defaults, Map.new(raw))
+        is_map(raw) -> Map.merge(defaults, raw)
+        is_boolean(raw) -> Map.put(defaults, :enabled, raw)
+        is_integer(raw) and raw > 0 -> %{defaults | enabled: true, interval_ms: raw}
+        true -> :invalid
+      end
+
+    with %{
+           enabled: enabled,
+           interval_ms: interval_ms,
+           kinds: kinds,
+           page_limit: page_limit,
+           include_presence: include_presence,
+           users_conversations_opts: users_conversations_opts
+         } = value
+         when map != :invalid <- map,
+         true <- is_boolean(enabled) || {:error, {:invalid_cache_sync_enabled, enabled}},
+         true <- positive?(interval_ms) || {:error, {:invalid_cache_sync_interval, interval_ms}},
+         true <- valid_kinds?(kinds) || {:error, {:invalid_cache_sync_kinds, kinds}},
+         true <-
+           (page_limit == :infinity or (is_integer(page_limit) and page_limit > 0)) ||
+             {:error, {:invalid_cache_sync_page_limit, page_limit}},
+         true <-
+           is_boolean(include_presence) ||
+             {:error, {:invalid_cache_sync_presence, include_presence}},
+         {:ok, normalized_opts} <- normalize_users_conversations_opts(users_conversations_opts) do
+      {:ok, %{value | users_conversations_opts: normalized_opts}}
+    else
+      :invalid -> {:error, {:invalid_cache_sync_option, raw}}
+      {:error, _} = error -> error
+    end
+  end
+
   defp valid_jitter?(value) when is_number(value), do: value >= 0 and value <= 1
   defp valid_jitter?(_), do: false
+
+  defp valid_kinds?(kinds) when is_list(kinds) and kinds != [] do
+    Enum.all?(kinds, &(&1 in [:users, :channels]))
+  end
+
+  defp valid_kinds?(_), do: false
+
+  defp normalize_users_conversations_opts(value) when is_map(value), do: {:ok, value}
+
+  defp normalize_users_conversations_opts(value) when is_list(value) do
+    {:ok, Map.new(value)}
+  rescue
+    ArgumentError ->
+      {:error, {:invalid_cache_sync_channel_opts, value}}
+  end
+
+  defp normalize_users_conversations_opts(_value),
+    do: {:error, {:invalid_cache_sync_channel_opts, :invalid}}
 
   defp positive?(value) when is_integer(value) and value > 0, do: true
   defp positive?(_), do: false

@@ -13,4 +13,6 @@ defmodule SlackBot.Cache.Adapter do
   @callback users(Config.t(), keyword()) :: map()
   @callback metadata(Config.t(), keyword()) :: map()
   @callback mutate(Config.t(), keyword(), SlackBot.Cache.cache_op()) :: :ok
+  @callback user_entry(Config.t(), keyword(), String.t()) ::
+              {:ok, %{data: map(), expires_at: integer()}} | :not_found
 end
