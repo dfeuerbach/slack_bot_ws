@@ -289,8 +289,21 @@ defmodule SlackBot.ConnectionManager do
     if bot_user?(config, user), do: Cache.leave_channel(config, channel)
   end
 
-  defp maybe_update_cache("channel_joined", %{"channel" => %{"id" => channel}}, config) do
-    Cache.join_channel(config, channel)
+  defp maybe_update_cache(
+         "channel_joined",
+         %{"channel" => %{"id" => channel_id} = channel},
+         config
+       ) do
+    Cache.join_channel(config, channel_id)
+
+    existing_channels =
+      config
+      |> Cache.metadata()
+      |> Map.get("channels_by_id", %{})
+
+    merged = Map.put(existing_channels, channel_id, channel)
+
+    Cache.put_metadata(config, %{"channels_by_id" => merged})
   end
 
   defp maybe_update_cache("team_join", %{"user" => user}, config) when is_map(user) do
