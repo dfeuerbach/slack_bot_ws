@@ -70,6 +70,8 @@ handler_id = {:basic_bot_rate_limiter, make_ref()}
 - `/demo blocks`
 - `/demo ping-ephemeral`
 - `/demo async-demo`
+- `/demo users`
+- `/demo channels`
 
 When the bot is in a channel:
 
