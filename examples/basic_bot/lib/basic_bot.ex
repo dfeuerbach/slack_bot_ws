@@ -6,10 +6,16 @@ defmodule BasicBot do
 
   use SlackBot
 
-  middleware SlackBot.Middleware.Logger
+  alias SlackBot.Cache
+
+  middleware(SlackBot.Middleware.Logger)
 
   handle_event "app_mention", event, ctx do
-    respond(event["channel"], "Hi <@#{event["user"]}>! Try `/demo list short fleet` or `/demo help`.", ctx)
+    respond(
+      event["channel"],
+      "Hi <@#{event["user"]}>! Try `/demo list short fleet` or `/demo help`.",
+      ctx
+    )
   end
 
   handle_event "block_actions", payload, _ctx do
@@ -45,34 +51,47 @@ defmodule BasicBot do
     end
   end
 
-  slash "/demo", ack: :ephemeral do
+  slash "/demo" do
     grammar do
       choice do
         sequence do
-          literal "list", as: :mode, value: :list
-          optional literal("short", as: :short?)
-          value :subject
+          literal("list", as: :mode, value: :list)
+          optional(literal("short", as: :short?))
+          value(:subject)
 
           repeat do
-            literal "tag"
-            value :tags
+            literal("tag")
+            value(:tags)
           end
         end
+
         sequence do
-          literal "report", as: :mode, value: :report
-          value :team
+          literal("report", as: :mode, value: :report)
+          value(:team)
         end
+
         sequence do
-          literal "blocks", as: :mode, value: :blocks
+          literal("blocks", as: :mode, value: :blocks)
         end
+
         sequence do
-          literal "ping-ephemeral", as: :mode, value: :ping_ephemeral
+          literal("ping-ephemeral", as: :mode, value: :ping_ephemeral)
         end
+
         sequence do
-          literal "async-demo", as: :mode, value: :async_demo
+          literal("async-demo", as: :mode, value: :async_demo)
         end
+
         sequence do
-          literal "help", as: :mode, value: :help
+          literal("help", as: :mode, value: :help)
+        end
+
+        sequence do
+          literal("users", as: :mode, value: :users)
+        end
+
+        sequence do
+          literal("channels", as: :mode, value: :channels)
         end
       end
     end
@@ -99,6 +118,12 @@ defmodule BasicBot do
 
         :help ->
           respond(channel, help_text(), ctx)
+
+        :users ->
+          demo_users(channel, ctx)
+
+        :channels ->
+          demo_channels(channel, ctx)
       end
     end
   end
@@ -153,6 +178,195 @@ defmodule BasicBot do
     SlackBot.push_async(BasicBot.SlackBot, {"chat.postMessage", final})
   end
 
+  defp demo_users(channel, _ctx) do
+    users =
+      BasicBot.SlackBot
+      |> Cache.users()
+      |> Map.values()
+
+    blocks =
+      case users do
+        [] ->
+          [
+            SlackBot.Blocks.section("*Cached users*"),
+            SlackBot.Blocks.context([
+              "No cached users yet. Try again after someone interacts with the bot so their profile can be cached."
+            ])
+          ]
+
+        _ ->
+          users
+          |> Enum.shuffle()
+          |> Enum.take(5)
+          |> build_user_blocks()
+      end
+
+    body = %{
+      channel: channel,
+      text: "Cached users from BasicBot",
+      blocks: blocks
+    }
+
+    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+  end
+
+  defp demo_channels(channel, _ctx) do
+    joined_ids =
+      BasicBot.SlackBot
+      |> Cache.channels()
+      |> Enum.sort()
+
+    channels =
+      joined_ids
+      |> Enum.map(fn id -> {id, Cache.get_channel(BasicBot.SlackBot, id)} end)
+
+    blocks =
+      case channels do
+        [] ->
+          [
+            SlackBot.Blocks.section("*Joined channels*"),
+            SlackBot.Blocks.context([
+              "No joined channels are currently cached."
+            ])
+          ]
+
+        list ->
+          list
+          |> Enum.take(20)
+          |> build_channel_blocks(length(list))
+      end
+
+    body = %{
+      channel: channel,
+      text: "Joined channels from BasicBot",
+      blocks: blocks
+    }
+
+    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+  end
+
+  defp build_user_blocks(users) when is_list(users) do
+    header = [
+      SlackBot.Blocks.section("*Cached users*"),
+      SlackBot.Blocks.context([
+        "Sample of up to 5 users from the metadata cache."
+      ]),
+      SlackBot.Blocks.divider()
+    ]
+
+    entries =
+      users
+      |> Enum.flat_map(fn %{"id" => id} = user ->
+        profile = Map.get(user, "profile", %{})
+
+        handle = Map.get(user, "name")
+        display = Map.get(profile, "display_name")
+        email = Map.get(profile, "email")
+        title = Map.get(profile, "title")
+        presence = Map.get(user, "presence")
+
+        name_part =
+          cond do
+            display && handle -> "#{display} (#{handle})"
+            display -> display
+            handle -> handle
+            true -> id
+          end
+
+        primary = SlackBot.Blocks.section("*<@#{id}>*  #{name_part}")
+
+        secondary_items =
+          [
+            email && "*Email* #{email}",
+            title && "*Title* #{title}",
+            presence && "*Presence* #{presence}"
+          ]
+          |> Enum.reject(&is_nil/1)
+
+        secondary =
+          case secondary_items do
+            [] ->
+              []
+
+            items ->
+              [
+                SlackBot.Blocks.context([
+                  Enum.join(items, "  •  ")
+                ])
+              ]
+          end
+
+        [primary | secondary]
+      end)
+
+    header ++ entries
+  end
+
+  defp build_channel_blocks(channels, total_count) when is_list(channels) do
+    header = [
+      SlackBot.Blocks.section("*Joined channels*"),
+      SlackBot.Blocks.context([
+        "Showing up to 20 channels from the cache."
+      ]),
+      SlackBot.Blocks.divider()
+    ]
+
+    entries =
+      channels
+      |> Enum.flat_map(fn
+        {id, %{"name" => name} = channel} ->
+          visibility =
+            case {channel["is_private"], channel["is_channel"]} do
+              {true, _} -> "private"
+              {_, true} -> "public"
+              _ -> nil
+            end
+
+          members = channel["num_members"]
+
+          primary_label =
+            case visibility do
+              nil -> "*##{name}*"
+              vis -> "*##{name}*  _(#{vis})_"
+            end
+
+          primary = SlackBot.Blocks.section(primary_label)
+
+          secondary_items =
+            [
+              members && "*Members* #{members}",
+              "*ID* #{id}"
+            ]
+            |> Enum.reject(&is_nil/1)
+
+          secondary =
+            [
+              SlackBot.Blocks.context([
+                Enum.join(secondary_items, "  •  ")
+              ])
+            ]
+
+          [primary | secondary]
+
+        {id, _} ->
+          [SlackBot.Blocks.section("*Channel* #{id}")]
+      end)
+
+    extra =
+      case total_count - length(channels) do
+        n when n > 0 ->
+          [
+            SlackBot.Blocks.divider(),
+            SlackBot.Blocks.context(["…and #{n} more channels in the cache."])
+          ]
+
+        _ ->
+          []
+      end
+
+    header ++ entries ++ extra
+  end
+
   defp help_text do
     """
     `/demo list short fleet tag alpha tag beta` - list details for a subject with optional tags.
@@ -160,6 +374,8 @@ defmodule BasicBot do
     `/demo blocks` - send a Block Kit message (uses BlockBox when configured).
     `/demo ping-ephemeral` - send an ephemeral message visible only to you.
     `/demo async-demo` - send a series of async messages followed by a final one.
+    `/demo users` - show a sample of cached users with basic metadata.
+    `/demo channels` - show the channels this bot has joined from the cache.
     """
   end
 
