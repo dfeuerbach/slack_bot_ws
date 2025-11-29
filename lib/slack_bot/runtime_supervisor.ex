@@ -28,7 +28,11 @@ defmodule SlackBot.RuntimeSupervisor do
     api_pool_opts = Keyword.put(config.api_pool_opts, :name, api_pool_name)
 
     children =
-      []
+      [
+        # Start Finch pools first so dependent workers (cache sync, cache, etc.) can push immediately.
+        {Finch, name: ack_pool_name},
+        {Finch, api_pool_opts}
+      ]
       |> Kernel.++(SlackBot.Cache.child_specs(config))
       |> Kernel.++(tier_limiter_child_specs(config))
       |> Kernel.++(rate_limiter_child_specs(config))
@@ -36,8 +40,6 @@ defmodule SlackBot.RuntimeSupervisor do
       |> Kernel.++(cache_sync_child_specs(config, base_name, config_server))
       |> Kernel.++([SlackBot.Diagnostics.child_spec(config)])
       |> Kernel.++([
-        {Finch, name: ack_pool_name},
-        {Finch, api_pool_opts},
         %{
           id: task_supervisor_name,
           start: {Task.Supervisor, :start_link, [[name: task_supervisor_name]]},
