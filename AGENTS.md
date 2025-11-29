@@ -74,6 +74,21 @@ non-obvious rules so that automated changes remain idiomatic and safe.
   - Respect the types and validation rules in `SlackBot.Config` (for example
     `ack_mode`, `diagnostics`, `cache`, `event_buffer`).
 
+- **Quick reference** for the most common keys (see `SlackBot.Config` for full docs):
+  - `backoff`: `%{min_ms: 1_000, max_ms: 30_000, max_attempts: :infinity, jitter_ratio: 0.2}`. Keep `min_ms < max_ms`, positive integers, and `0 <= jitter_ratio <= 1`.
+  - `cache` / `event_buffer`: `{:ets, opts}` by default; switch to `{:adapter, Module, opts}` only when you already have a behaviour-compliant backend. Keep opts keyword lists.
+  - `rate_limiter`: default `{:adapter, SlackBot.RateLimiter.Adapters.ETS, []}`. Use `:none` only when the human author explicitly accepts unshaped API traffic.
+  - `cache_sync`: `%{enabled: true, interval_ms: 3_600_000, kinds: [:channels], users_conversations_opts: %{}}`. Accepts maps or keyword lists; `kinds` must be a non-empty subset of `[:users, :channels]`.
+  - `user_cache`: `%{ttl_ms: 3_600_000, cleanup_interval_ms: 300_000}`. Keep both values positive.
+  - `telemetry_stats`: `%{enabled: false, flush_interval_ms: 15_000, ttl_ms: 300_000}`. Set to `true` or a keyword/map to enable the telemetry snapshotter.
+  - `diagnostics`: `%{enabled: false, buffer_size: 200}`. Accepts booleans, keyword lists, or maps. Keep buffer sizes positive and enable only when the maintainer approves retaining payloads.
+  - `ack_mode`: `:silent | :ephemeral | {:custom, (map(), SlackBot.Config.t() -> any())}`. Custom functions must be arity 2 and never block.
+  - `block_builder`: `:none` or `{:blockbox, opts}` when the project uses BlockBox helpers.
+  - `api_pool_opts`: forwarded to Finch (`[pools: %{default: [size: 20, count: 2]}]` is a typical shape). Stay within Finch’s supported options.
+  - `assigns`: map-only; set `:bot_user_id` when cache sync needs zero-cost membership checks, or `:slash_ack_text` when opting into `:ephemeral` acks.
+  - `telemetry_prefix`: list of atoms (`[:slackbot]` default). Never mix types.
+  - `instance_name`, `transport`, `transport_opts`, `http_client`, `ack_client`: module references only; no anonymous functions.
+
 ## Adapters and extensibility
 
 - Use the existing behaviours when introducing new backends:
@@ -85,6 +100,10 @@ non-obvious rules so that automated changes remain idiomatic and safe.
 
 ## Telemetry, diagnostics and logging
 
+- Prefer `telemetry_prefix` overrides only when multiple bots coexist in the same BEAM node; keep prefixes short and list-only so `Telemetry.Metrics` signatures remain stable.
+- Enable `telemetry_stats` when automation needs rolled-up counters (`SlackBot.TelemetryStats.snapshot/1`). The stats process attaches to your prefix automatically; no additional wiring is needed beyond the config block.
+- Reference `docs/telemetry_dashboard.md` when adding LiveDashboard metrics or custom handlers. Reuse its `Telemetry.Metrics` definitions instead of inventing new ones.
+- Diagnostics buffers (`diagnostics: [enabled: true, buffer_size: 300]`) retain full Slack payloads. Confirm with the maintainer that retaining user text is acceptable, and clear the buffer after use.
 - New Telemetry events should follow the existing naming pattern in `SlackBot.Telemetry`
   (prefix list plus concise event names).
 
@@ -94,6 +113,32 @@ non-obvious rules so that automated changes remain idiomatic and safe.
 - When adding logging:
   - Prefer using `SlackBot.Logging.with_envelope/3` where appropriate.
   - Avoid excessive or noisy logs at `:info` level; use `:debug` when possible.
+
+## Rate limiting and Web API shaping
+
+- All outbound Web API calls should go through `SlackBot.push/2` or `SlackBot.push_async/2` so both the per-channel rate limiter and the tier limiter can see the traffic.
+- `rate_limiter: :none` removes the per-channel queues—only use it when a maintainer explicitly confirms the workload is already shaped elsewhere.
+- Tier-level quotas live in `SlackBot.TierRegistry`. Override entries via `config :slack_bot_ws, SlackBot.TierRegistry, tiers: %{}` when Slack changes quotas or custom grouping is needed. Keep `:max_calls`, `:window_ms`, and `:scope` consistent with README guidance.
+- Pay attention to `[:slackbot, :rate_limiter, ...]` and `[:slackbot, :tier_limiter, ...]` telemetry events before changing limiter settings. Spikes in `queue_length` mean you should coordinate with the maintainer before dialing back safeguards.
+
+## Metadata cache and sync
+
+- Default cache + event buffer adapters use ETS. Stick with them unless the project already depends on a custom adapter that implements `SlackBot.Cache.Adapter` / `SlackBot.EventBuffer.Adapter`.
+- Keep `cache_sync` enabled unless the maintainer asks to disable it. It keeps users/channels fresh via `users.conversations` and surfaces helpers like `SlackBot.Cache.channels/1`.
+- When narrowing sync scope, prefer `cache_sync: [kinds: [:channels], users_conversations_opts: %{types: "..."}]` over ad-hoc Slack API calls inside handlers.
+- Set `assigns: %{bot_user_id: "U123"}` once the bot user ID is known so the cache can track membership without extra API calls.
+- Respect `user_cache` TTL/cleanup values; do not mutate `%SlackBot.Config{}` structs in place to force refreshes. Use the cache helpers or explicit Slack API calls routed through `SlackBot.push/2`.
+
+## Slash command acknowledgements
+
+- Default `ack_mode` is `:silent`, so commands only post their final response. Opt into `:ephemeral` in config or per-command assigns when the maintainer wants the “Processing…” placeholder.
+- Custom ack callbacks must be idempotent and fast; they receive the parsed command map plus the immutable `%SlackBot.Config{}`. Never perform blocking I/O inside the callback—delegate to a Task if needed.
+- `ack_client` defaults to `SlackBot.SlashAck.HTTP`. Override it only when tests provide a fake HTTP client or when the project introduces a custom transport.
+
+## Testing helpers
+
+- Prefer `SlackBot.TestTransport` and `SlackBot.TestHTTP` (under `lib/slack_bot/testing/`) for automated tests. They simulate Socket Mode frames and Web API responses without hitting Slack.
+- When writing new tests, start from `examples/basic_bot/` for guidance on slash grammar, telemetry probes, and diagnostics replay. Reuse its helpers instead of creating bespoke test harnesses.
 
 ## Anti-patterns to avoid
 
