@@ -18,12 +18,23 @@ defmodule SlackBot do
   names from that base.
   """
 
+  alias SlackBot.Cache
   alias SlackBot.Config
   alias SlackBot.ConfigServer
   alias SlackBot.ConnectionManager
   alias SlackBot.Diagnostics
   alias SlackBot.RateLimiter
   alias SlackBot.Telemetry
+
+  @typedoc """
+  Criteria for matching cached Slack users.
+  """
+  @type user_matcher :: {:id, String.t()} | {:email, String.t()} | {:name, String.t()}
+
+  @typedoc """
+  Criteria for matching cached Slack channels.
+  """
+  @type channel_matcher :: {:id, String.t()} | {:name, String.t()}
 
   @reserved_supervisor_opts [:name, :config_server, :runtime_supervisor]
 
@@ -138,6 +149,92 @@ defmodule SlackBot do
     |> ConnectionManager.emit(type, payload)
   end
 
+  @doc """
+  Finds a cached Slack user for the given bot instance.
+
+  Matchers:
+
+    * `{:id, "U123"}` – returns the cached payload for the exact Slack user ID.
+    * `{:email, "user@example.com"}` – matches against the cached profile email (case-insensitive).
+    * `{:name, "alice"}` – matches the legacy username or profile display name (case-insensitive).
+
+  ## Examples
+
+      iex> MyBot.find_user({:name, "alice"})
+      %{"id" => "U123", "name" => "alice", ...}
+  """
+  @spec find_user(GenServer.server(), user_matcher) :: map() | nil
+  def find_user(server \\ __MODULE__, matcher) do
+    Cache.find_user(server, matcher)
+  end
+
+  @doc """
+  Finds multiple cached Slack users in one call.
+
+  Returns a map from matcher -> user map. Set `include_missing?: true` to include entries for
+  matchers that currently miss the cache (with a `nil` value).
+
+  ## Examples
+
+      iex> MyBot.find_users([{:name, "alice"}, {:name, "bob"}])
+      %{
+        {:name, "alice"} => %{"id" => "U1"},
+        {:name, "bob"} => %{"id" => "U2"}
+      }
+  """
+  @spec find_users(GenServer.server(), [user_matcher], keyword()) ::
+          %{optional(user_matcher) => map() | nil}
+  def find_users(server \\ __MODULE__, matchers, opts \\ []) when is_list(matchers) do
+    include_missing? = Keyword.get(opts, :include_missing?, false)
+
+    Enum.reduce(matchers, %{}, fn matcher, acc ->
+      case find_user(server, matcher) do
+        nil when include_missing? -> Map.put(acc, matcher, nil)
+        nil -> acc
+        user -> Map.put(acc, matcher, user)
+      end
+    end)
+  end
+
+  @doc """
+  Finds a cached Slack channel for the given bot instance.
+
+  Matchers:
+
+    * `{:id, "C123"}` – returns the cached channel payload for the exact Slack channel ID.
+    * `{:name, "#general"}` / `{:name, "general"}` – case-insensitive name lookup (leading `#`
+      optional).
+
+  ## Examples
+
+      iex> MyBot.find_channel({:name, "#fp-atlas"})
+      %{"id" => "C42", "name" => "fp-atlas", ...}
+  """
+  @spec find_channel(GenServer.server(), channel_matcher) :: map() | nil
+  def find_channel(server \\ __MODULE__, matcher) do
+    Cache.find_channel(server, matcher)
+  end
+
+  @doc """
+  Finds multiple cached Slack channels in one call.
+
+  Behaves like `find_users/3`, returning a map of matcher -> channel map (or `nil` when
+  `include_missing?: true`).
+  """
+  @spec find_channels(GenServer.server(), [channel_matcher], keyword()) ::
+          %{optional(channel_matcher) => map() | nil}
+  def find_channels(server \\ __MODULE__, matchers, opts \\ []) when is_list(matchers) do
+    include_missing? = Keyword.get(opts, :include_missing?, false)
+
+    Enum.reduce(matchers, %{}, fn matcher, acc ->
+      case find_channel(server, matcher) do
+        nil when include_missing? -> Map.put(acc, matcher, nil)
+        nil -> acc
+        channel -> Map.put(acc, matcher, channel)
+      end
+    end)
+  end
+
   defp split_opts(opts) do
     supervisor_opts = Keyword.take(opts, @reserved_supervisor_opts)
     config_opts = Keyword.drop(opts, @reserved_supervisor_opts)
@@ -178,6 +275,26 @@ defmodule SlackBot do
 
     quote bind_quoted: [router_opts: router_opts, otp_app: otp_app] do
       use SlackBot.Router, router_opts
+
+      @doc false
+      @spec find_user(SlackBot.user_matcher()) :: map() | nil
+      def find_user(matcher), do: SlackBot.find_user(__MODULE__, matcher)
+
+      @doc false
+      @spec find_users([SlackBot.user_matcher()], keyword()) ::
+              %{optional(SlackBot.user_matcher()) => map() | nil}
+      def find_users(matchers, opts \\ []),
+        do: SlackBot.find_users(__MODULE__, matchers, opts)
+
+      @doc false
+      @spec find_channel(SlackBot.channel_matcher()) :: map() | nil
+      def find_channel(matcher), do: SlackBot.find_channel(__MODULE__, matcher)
+
+      @doc false
+      @spec find_channels([SlackBot.channel_matcher()], keyword()) ::
+              %{optional(SlackBot.channel_matcher()) => map() | nil}
+      def find_channels(matchers, opts \\ []),
+        do: SlackBot.find_channels(__MODULE__, matchers, opts)
 
       if otp_app do
         @slackbot_otp_app otp_app

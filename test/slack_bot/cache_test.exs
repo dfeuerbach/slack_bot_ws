@@ -88,19 +88,88 @@ defmodule SlackBot.CacheTest do
     def apps_connections_open(_config), do: {:ok, "wss://test.example/socket"}
 
     def post(_config, "users.info", %{"user" => user_id}) do
-      count = Process.get(:fetch_http_calls, 0)
-      Process.put(:fetch_http_calls, count + 1)
+      bump(:users_info_calls)
+      {:ok, %{"user" => user_payload(user_id)}}
+    end
+
+    def post(_config, "users.lookupByEmail", %{"email" => email}) do
+      bump(:users_lookup_calls)
+      {:ok, %{"user" => user_payload("lookup-#{email}")}}
+    end
+
+    def post(_config, "users.list", body) do
+      bump(:users_list_calls)
+
+      members =
+        [
+          user_payload("U-LIST-1", %{
+            "name" => "alice",
+            "profile" => %{"display_name" => "Alice"}
+          }),
+          user_payload("U-LIST-2", %{
+            "name" => "bob",
+            "profile" => %{"display_name" => "Bobby"}
+          })
+        ]
+
+      response =
+        if Map.get(body, "cursor") == "end" do
+          %{"members" => [], "response_metadata" => %{"next_cursor" => ""}}
+        else
+          %{"members" => members, "response_metadata" => %{"next_cursor" => ""}}
+        end
+
+      {:ok, response}
+    end
+
+    def post(_config, "conversations.info", %{"channel" => channel_id}) do
+      bump(:conversations_info_calls)
 
       {:ok,
        %{
-         "user" => %{
-           "id" => user_id,
-           "name" => "user-#{user_id}"
+         "channel" => %{
+           "id" => channel_id,
+           "name" => "chan-#{channel_id}"
          }
        }}
     end
 
+    def post(_config, "users.conversations", body) do
+      bump(:users_conversations_calls)
+
+      channels =
+        [
+          %{"id" => "C-ENG", "name" => "eng"},
+          %{"id" => "C-SALES", "name_normalized" => "sales"}
+        ]
+
+      response =
+        if Map.get(body, "cursor") == "end" do
+          %{"channels" => [], "response_metadata" => %{"next_cursor" => ""}}
+        else
+          %{"channels" => channels, "response_metadata" => %{"next_cursor" => ""}}
+        end
+
+      {:ok, response}
+    end
+
+    def post(_config, "auth.test", _body) do
+      {:ok, %{"user_id" => "U-BOT"}}
+    end
+
     def post(_config, _method, body), do: {:ok, body}
+
+    defp bump(key) do
+      count = Process.get(key, 0)
+      Process.put(key, count + 1)
+    end
+
+    defp user_payload(id, extras \\ %{}) do
+      Map.merge(
+        %{"id" => id, "name" => "user-#{id}", "profile" => %{"email" => "#{id}@example.com"}},
+        extras
+      )
+    end
   end
 
   setup do
@@ -193,15 +262,17 @@ defmodule SlackBot.CacheTest do
     assert %{"UA" => %{"email" => "a@example.com"}} = Cache.users(config)
   end
 
-  test "fetch_user caches responses and refreshes stale entries" do
-    Process.put(:fetch_http_calls, 0)
+  test "find_user is read-through for ids, emails, and names" do
+    Process.put(:users_info_calls, 0)
+    Process.put(:users_lookup_calls, 0)
+    Process.put(:users_list_calls, 0)
 
     config =
       SlackBot.Config.build!(
         app_token: "xapp-cache",
         bot_token: "xoxb-cache",
         module: SlackBot.TestHandler,
-        instance_name: CacheTest.FetchInstance,
+        instance_name: CacheTest.ReadThroughUsers,
         rate_limiter: :none,
         http_client: __MODULE__.FetchHTTP,
         user_cache: %{ttl_ms: 20, cleanup_interval_ms: 10}
@@ -210,18 +281,44 @@ defmodule SlackBot.CacheTest do
     Cache.child_specs(config)
     |> Enum.each(&start_supervised!(&1))
 
-    assert {:ok, %{"id" => "UF1"}} = Cache.fetch_user(config, "UF1")
-    assert Process.get(:fetch_http_calls) == 1
+    assert %{"id" => "UF1"} = Cache.find_user(config, {:id, "UF1"})
+    assert Process.get(:users_info_calls) == 1
+    assert %{"id" => "UF1"} = Cache.find_user(config, {:id, "UF1"})
+    assert Process.get(:users_info_calls) == 1
 
-    # Cached entry should be reused
-    assert {:ok, %{"id" => "UF1"}} = Cache.fetch_user(config, "UF1")
-    assert Process.get(:fetch_http_calls) == 1
+    assert %{"id" => "lookup-ops@example.com"} =
+             Cache.find_user(config, {:email, "ops@example.com"})
 
-    # Allow TTL to expire and ensure we refetch
-    Process.sleep(30)
+    assert Process.get(:users_lookup_calls) == 1
 
-    assert {:ok, %{"id" => "UF1"}} = Cache.fetch_user(config, "UF1")
-    assert Process.get(:fetch_http_calls) == 2
+    assert %{"id" => "U-LIST-2"} = Cache.find_user(config, {:name, "bobby"})
+    assert Process.get(:users_list_calls) == 1
+  end
+
+  test "find_channel is read-through for ids and names" do
+    Process.put(:conversations_info_calls, 0)
+    Process.put(:users_conversations_calls, 0)
+
+    config =
+      SlackBot.Config.build!(
+        app_token: "xapp-cache",
+        bot_token: "xoxb-cache",
+        module: SlackBot.TestHandler,
+        instance_name: CacheTest.ReadThroughChannels,
+        rate_limiter: :none,
+        http_client: __MODULE__.FetchHTTP
+      )
+
+    Cache.child_specs(config)
+    |> Enum.each(&start_supervised!(&1))
+
+    assert %{"id" => "C-42"} = Cache.find_channel(config, {:id, "C-42"})
+    assert Process.get(:conversations_info_calls) == 1
+    assert %{"id" => "C-42"} = Cache.find_channel(config, {:id, "C-42"})
+    assert Process.get(:conversations_info_calls) == 1
+
+    assert %{"id" => "C-SALES"} = Cache.find_channel(config, {:name, "#sales"})
+    assert Process.get(:users_conversations_calls) == 1
   end
 
   test "janitor removes expired users" do

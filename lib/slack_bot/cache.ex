@@ -91,11 +91,7 @@ defmodule SlackBot.Cache do
     mutate(config, {:put_metadata, metadata})
   end
 
-  @doc """
-  Fetches a cached user by Slack user ID.
-
-  Returns `nil` when the user is not present in the cache.
-  """
+  @doc false
   @spec get_user(SlackBot.Config.t() | GenServer.server(), String.t()) :: map() | nil
   def get_user(config_or_name, user_id) when is_binary(user_id) do
     config_or_name
@@ -103,113 +99,34 @@ defmodule SlackBot.Cache do
     |> Map.get(user_id)
   end
 
-  @doc """
-  Finds a cached user by secondary attributes.
-
-  Supported matchers:
-
-    * `{:email, email}` – matches against `user["profile"]["email"]` (case-insensitive).
-    * `{:name, name}` – matches against `user["name"]` or `user["profile"]["display_name"]`
-      (case-insensitive).
-
-  ## Examples
-
-      iex> config = SlackBot.config(MyApp.SlackBot)
-      iex> SlackBot.Cache.find_user(config, {:email, "alice@example.com"})
-      %{"id" => "U123", "profile" => %{"email" => "alice@example.com"}, ...}
-
-      iex> config = SlackBot.config(MyApp.SlackBot)
-      iex> SlackBot.Cache.find_user(config, {:name, "alice"})
-      %{"id" => "U123", "name" => "alice", ...}
-
-  Returns the first matching user map or `nil` when no user matches.
-  """
+  @doc false
   @spec find_user(
           SlackBot.Config.t() | GenServer.server(),
-          {:email, String.t()} | {:name, String.t()}
+          {:id, String.t()} | {:email, String.t()} | {:name, String.t()}
         ) ::
           map() | nil
+  def find_user(config_or_name, {:id, user_id}) when is_binary(user_id) do
+    get_user(config_or_name, user_id) ||
+      config_or_name
+      |> ensure_config()
+      |> fetch_user_by_id(user_id)
+  end
+
   def find_user(config_or_name, {:email, email}) when is_binary(email) do
-    email_downcase = String.downcase(email)
-
-    config_or_name
-    |> users()
-    |> Enum.find_value(fn
-      {_id, %{"profile" => %{"email" => user_email}} = user} ->
-        if is_binary(user_email) and String.downcase(user_email) == email_downcase do
-          user
-        else
-          nil
-        end
-
-      _ ->
-        nil
-    end)
+    find_user_by_email_in_cache(config_or_name, email) ||
+      config_or_name
+      |> ensure_config()
+      |> fetch_user_by_email(email)
   end
 
   def find_user(config_or_name, {:name, name}) when is_binary(name) do
-    name_downcase = String.downcase(name)
-
-    config_or_name
-    |> users()
-    |> Enum.find_value(fn
-      {_id, user} when is_map(user) ->
-        cond do
-          is_binary(user["name"]) and
-              String.downcase(user["name"]) == name_downcase ->
-            user
-
-          match?(%{"profile" => %{"display_name" => _}}, user) and
-            is_binary(get_in(user, ["profile", "display_name"])) and
-              String.downcase(get_in(user, ["profile", "display_name"])) == name_downcase ->
-            user
-
-          true ->
-            nil
-        end
-
-      _ ->
-        nil
-    end)
+    find_user_by_name_in_cache(config_or_name, name) ||
+      config_or_name
+      |> ensure_config()
+      |> fetch_user_by_name(name)
   end
 
-  @doc """
-  Fetches a user, refreshing the cache on demand when the entry is missing or stale.
-
-  Returns `{:ok, user}` on success or `{:error, reason}` when the Slack API lookup fails.
-  """
-  @spec fetch_user(SlackBot.Config.t() | GenServer.server(), String.t(), keyword()) ::
-          {:ok, map()} | {:error, term()}
-  def fetch_user(config_or_name, user_id, _opts \\ [])
-
-  def fetch_user(_config_or_name, user_id, _opts) when not is_binary(user_id) do
-    {:error, {:invalid_user_id, user_id}}
-  end
-
-  def fetch_user(config_or_name, user_id, _opts) do
-    {config, adapter, adapter_opts} = resolve(config_or_name)
-    ttl_ms = user_cache_opts(config).ttl_ms
-    now = now_ms()
-
-    case adapter.user_entry(config, adapter_opts, user_id) do
-      {:ok, %{data: user, expires_at: expires_at}} when expires_at > now ->
-        {:ok, user}
-
-      {:ok, _stale} ->
-        mutate(config, {:drop_user, user_id})
-        fetch_and_cache_user(config, user_id, ttl_ms)
-
-      :not_found ->
-        fetch_and_cache_user(config, user_id, ttl_ms)
-    end
-  end
-
-  @doc """
-  Fetches a cached channel by Slack channel ID.
-
-  This helper looks in the metadata map under the `\"channels_by_id\"` key, which is
-  maintained by the background cache sync worker when enabled.
-  """
+  @doc false
   @spec get_channel(SlackBot.Config.t() | GenServer.server(), String.t()) :: map() | nil
   def get_channel(config_or_name, channel_id) when is_binary(channel_id) do
     config_or_name
@@ -218,37 +135,25 @@ defmodule SlackBot.Cache do
     |> Map.get(channel_id)
   end
 
-  @doc """
-  Finds a cached channel by human-readable name.
+  @doc false
+  @spec find_channel(
+          SlackBot.Config.t() | GenServer.server(),
+          {:id, String.t()} | {:name, String.t()}
+        ) :: map() | nil
+  def find_channel(config_or_name, {:id, channel_id}) when is_binary(channel_id) do
+    get_channel(config_or_name, channel_id) ||
+      config_or_name
+      |> ensure_config()
+      |> fetch_channel_by_id(channel_id)
+  end
 
-  The lookup is case-insensitive and accepts both bare names (`\"general\"`) and
-  names prefixed with `\"#\"` (`\"#general\"`).
-
-  Returns the first matching channel map or `nil` when no channel matches.
-  """
-  @spec find_channel(SlackBot.Config.t() | GenServer.server(), {:name, String.t()}) :: map() | nil
   def find_channel(config_or_name, {:name, name}) when is_binary(name) do
-    target =
-      name
-      |> String.trim_leading("#")
-      |> String.downcase()
+    target = normalize_channel_name(name)
 
-    config_or_name
-    |> metadata()
-    |> Map.get("channels_by_id", %{})
-    |> Enum.find_value(fn
-      {_id, channel} when is_map(channel) ->
-        name = channel["name"] || channel["name_normalized"]
-
-        if is_binary(name) and String.downcase(name) == target do
-          channel
-        else
-          nil
-        end
-
-      _ ->
-        nil
-    end)
+    find_channel_by_name_in_cache(config_or_name, target) ||
+      config_or_name
+      |> ensure_config()
+      |> fetch_channel_by_name(target)
   end
 
   defp mutate(%SlackBot.Config{} = config, op) do
@@ -285,17 +190,214 @@ defmodule SlackBot.Cache do
     end
   end
 
-  defp fetch_and_cache_user(config, user_id, ttl_ms) do
-    case SlackBot.push(config, {"users.info", %{"user" => user_id}}) do
-      {:ok, %{"user" => user}} ->
-        expires_at = now_ms() + ttl_ms
-        mutate(config, {:put_user, user, expires_at})
-        {:ok, user}
+  defp ensure_config(%SlackBot.Config{} = config), do: config
+  defp ensure_config(name), do: SlackBot.config(name)
 
-      {:error, reason} ->
-        {:error, reason}
+  defp find_user_by_email_in_cache(config_or_name, email) do
+    email_downcase = String.downcase(email)
+
+    config_or_name
+    |> users()
+    |> Enum.find_value(fn
+      {_id, %{"profile" => %{"email" => user_email}} = user} ->
+        if is_binary(user_email) and String.downcase(user_email) == email_downcase do
+          user
+        else
+          nil
+        end
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp find_user_by_name_in_cache(config_or_name, name) do
+    name_downcase = String.downcase(name)
+
+    config_or_name
+    |> users()
+    |> Enum.find_value(fn
+      {_id, user} when is_map(user) ->
+        user_name_matches?(user, name_downcase)
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp fetch_user_by_id(%SlackBot.Config{} = config, user_id) do
+    case SlackBot.push(config, {"users.info", %{"user" => user_id}}) do
+      {:ok, %{"user" => user}} -> cache_user(config, user)
+      _ -> nil
     end
   end
+
+  defp fetch_user_by_email(%SlackBot.Config{} = config, email) do
+    case SlackBot.push(config, {"users.lookupByEmail", %{"email" => email}}) do
+      {:ok, %{"user" => user}} -> cache_user(config, user)
+      _ -> nil
+    end
+  end
+
+  defp fetch_user_by_name(%SlackBot.Config{} = config, name) do
+    name_downcase = String.downcase(name)
+    fetch_user_list_page(config, name_downcase, nil)
+  end
+
+  defp fetch_user_list_page(config, name_downcase, cursor) do
+    body =
+      %{"limit" => 200}
+      |> maybe_put_cursor(cursor)
+
+    case SlackBot.push(config, {"users.list", body}) do
+      {:ok, %{"members" => members} = resp} ->
+        Enum.each(members, &cache_user(config, &1))
+
+        case Enum.find(members, &user_name_matches?(&1, name_downcase)) do
+          nil ->
+            next_cursor =
+              resp
+              |> Map.get("response_metadata", %{})
+              |> Map.get("next_cursor", "")
+
+            if is_binary(next_cursor) and next_cursor != "" do
+              fetch_user_list_page(config, name_downcase, next_cursor)
+            else
+              nil
+            end
+
+          user ->
+            user
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp user_name_matches?(user, target) do
+    cond do
+      is_binary(user["name"]) and String.downcase(user["name"]) == target ->
+        user
+
+      match?(%{"profile" => %{"display_name" => _}}, user) and
+        is_binary(get_in(user, ["profile", "display_name"])) and
+          String.downcase(get_in(user, ["profile", "display_name"])) == target ->
+        user
+
+      true ->
+        nil
+    end
+  end
+
+  defp cache_user(%SlackBot.Config{} = config, %{"id" => user_id} = user)
+       when is_binary(user_id) do
+    ttl_ms = user_cache_opts(config).ttl_ms
+    expires_at = now_ms() + ttl_ms
+    mutate(config, {:put_user, user, expires_at})
+    user
+  end
+
+  defp cache_user(_config, _user), do: nil
+
+  defp find_channel_by_name_in_cache(config_or_name, target) do
+    config_or_name
+    |> metadata()
+    |> Map.get("channels_by_id", %{})
+    |> Enum.find_value(fn
+      {_id, channel} when is_map(channel) ->
+        if channel_name_matches?(channel, target), do: channel, else: nil
+
+      _ ->
+        nil
+    end)
+  end
+
+  defp fetch_channel_by_id(%SlackBot.Config{} = config, channel_id) do
+    case SlackBot.push(config, {"conversations.info", %{"channel" => channel_id}}) do
+      {:ok, %{"channel" => channel}} -> cache_channel(config, channel)
+      _ -> nil
+    end
+  end
+
+  defp fetch_channel_by_name(%SlackBot.Config{} = config, target) do
+    with {:ok, bot_user_id} <- resolve_bot_user_id(config) do
+      do_fetch_channel_by_name(config, bot_user_id, target, nil)
+    else
+      _ -> nil
+    end
+  end
+
+  defp do_fetch_channel_by_name(config, bot_user_id, target, cursor) do
+    base_opts =
+      config.cache_sync.users_conversations_opts
+      |> Map.put("user", bot_user_id)
+
+    body = maybe_put_cursor(base_opts, cursor)
+
+    case SlackBot.push(config, {"users.conversations", body}) do
+      {:ok, %{"channels" => channels} = resp} ->
+        Enum.each(channels, &cache_channel(config, &1))
+
+        case Enum.find(channels, &channel_name_matches?(&1, target)) do
+          nil ->
+            next_cursor =
+              resp
+              |> Map.get("response_metadata", %{})
+              |> Map.get("next_cursor", "")
+
+            if is_binary(next_cursor) and next_cursor != "" do
+              do_fetch_channel_by_name(config, bot_user_id, target, next_cursor)
+            else
+              nil
+            end
+
+          channel ->
+            channel
+        end
+
+      _ ->
+        nil
+    end
+  end
+
+  defp cache_channel(%SlackBot.Config{} = config, %{"id" => channel_id} = channel)
+       when is_binary(channel_id) do
+    join_channel(config, channel_id)
+    put_metadata(config, %{"channels_by_id" => %{channel_id => channel}})
+    channel
+  end
+
+  defp cache_channel(_config, _channel), do: nil
+
+  defp resolve_bot_user_id(%SlackBot.Config{assigns: %{bot_user_id: id}}) when is_binary(id),
+    do: {:ok, id}
+
+  defp resolve_bot_user_id(%SlackBot.Config{} = config) do
+    case SlackBot.push(config, {"auth.test", %{}}) do
+      {:ok, %{"user_id" => user_id}} when is_binary(user_id) -> {:ok, user_id}
+      _ -> {:error, :bot_identity_unavailable}
+    end
+  end
+
+  defp normalize_channel_name(name) do
+    name
+    |> String.trim_leading("#")
+    |> String.downcase()
+  end
+
+  defp channel_name_matches?(channel, target) do
+    candidate = channel["name"] || channel["name_normalized"]
+    is_binary(candidate) and String.downcase(candidate) == target
+  end
+
+  defp maybe_put_cursor(body, nil), do: body
+
+  defp maybe_put_cursor(body, cursor) when is_binary(cursor) and cursor != "" do
+    Map.put(body, "cursor", cursor)
+  end
+
+  defp maybe_put_cursor(body, _), do: body
 
   defp user_cache_opts(%SlackBot.Config{user_cache: opts}), do: opts
 
