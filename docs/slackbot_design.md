@@ -69,7 +69,7 @@ SlackBot.Supervisor
 - `SlackBot.EventBuffer` behaviour with ETS-backed default (single-node). Adapter callbacks now center on `record(key, payload) :: {:ok | :duplicate, state}`, `delete/2`, `seen?/2`, and `pending/1`, letting the connection manager dedupe envelopes in a single RPC.
 - Redis adapter ships with the toolkit (powered by `Redix`) so envelope dedupe/replay can be shared across nodes without additional plumbing.
 - `SlackBot.Cache` exposes an adapter behaviour with `channels/2`, `users/2`, `metadata/2`, and `mutate/3`; the default ETS provider/mutation queue remains available, but you can plug Redis or any datastore while benefiting from the same public API. Set `mode: :async` inside the adapter opts when you want cache writes to be fire-and-forget.
-- User entries are read-through with a one-hour TTL by default (`SlackBot.Cache.fetch_user/2` refreshes stale or missing records) and a supervised janitor removes expired rows on a configurable cadence. The full `users.list` background sync is now optional; channel membership sync remains enabled by default.
+- User entries are read-through with a one-hour TTL by default (`SlackBot.find_user/2` and the bot-specific helpers refresh stale or missing records transparently) and a supervised janitor removes expired rows on a configurable cadence. The full `users.list` background sync is now optional; channel membership sync remains enabled by default.
 
 ### Command Router & Parsing
 - NimbleParsec baked in (non-optional). Default combinators handle:

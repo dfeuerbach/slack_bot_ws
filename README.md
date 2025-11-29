@@ -14,6 +14,8 @@ SlackBot is a Socket Mode toolkit for building resilient Slack bots in Elixir. I
 - Optional BlockBox integration for composing Block Kit payloads (see [BlockBox docs](https://hexdocs.pm/blockbox/BlockBox.html))
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
+- Read-through user & channel metadata cache (background sync keeps snapshots fresh, helpers fetch
+  from Slack on misses so handlers always have current identities and membership)
 
 If you have [Igniter](https://hexdocs.pm/igniter) available in your project, `mix slack_bot_ws.install`
 can scaffold a bot module, config, and supervision wiring for you so you can be talking to Slack
@@ -196,13 +198,14 @@ override any of the following keys under your bot module’s config:
       ]
     ```
 
-    When enabled (the default), `SlackBot.Cache.channels/1` reflects both real-time events and
-    the periodic background sync (`users.conversations`) so joined-channel information stays
-    current. User data is now populated on demand via `SlackBot.Cache.fetch_user/2` with a
-    one-hour TTL by default, so your handlers always see fresh metadata without waiting for a
-    full `users.list` pass. Helper functions such as `SlackBot.Cache.get_user/2`,
-    `find_user/2`, `get_channel/2`, and `find_channel/2` make it easy to look up entities by ID,
-    email, or name.
+    When enabled (the default), the sync keeps Slack membership and profile data fresh in the cache.
+    Channels are refreshed via `users.conversations`, and user entries expire based on the
+    `:user_cache` TTL (one hour by default) with a janitor process that clears stale records.
+
+    Your bot helpers (for example `MyApp.find_channel/1`, `MyApp.find_user/1`, and their plural
+    counterparts) always read from that cache first. If an entry is missing or expired, the helper
+    transparently fetches it from Slack and stores it back so subsequent lookups stay
+    in-memory-fast until the TTL elapses again.
 
     ```elixir
     # customize user cache TTL / cleanup cadence

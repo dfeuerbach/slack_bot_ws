@@ -8,10 +8,17 @@ to those events and surface them in Phoenix LiveDashboard (or any Telemetry cons
 
 | Event | Measurements | Metadata |
 | --- | --- | --- |
+| `[:slackbot, :api, :request]` | `%{duration: native}` | `%{method: String.t(), status: :ok | :error | :exception}` |
+| `[:slackbot, :api, :rate_limited]` | `%{retry_after_ms: integer, observed_at_ms: integer}` | `%{method: String.t(), key: term()}` |
 | `[:slackbot, :connection, :state]` | `%{count: 1}` | `%{state: :connected | :disconnected | :terminated | :down | :error, reason: term()}` |
 | `[:slackbot, :connection, :rate_limited]` | `%{delay_ms: integer}` | `%{}` |
-| `[:slackbot, :healthcheck, :ping]` | `%{duration: native} / %{delay_ms: integer}` | `%{status: :ok | :error | :fatal | :rate_limited, reason: term()}` |
+| `[:slackbot, :healthcheck, :ping]` | `%{duration: native}` / `%{delay_ms: integer}` | `%{status: :ok | :error | :fatal | :rate_limited | :unknown, reason: term()}` |
+| `[:slackbot, :healthcheck, :disabled]` | `%{count: 1}` | `%{}` |
+| `[:slackbot, :cache, :sync]` | `%{duration: native, count: integer}` | `%{kind: :users | :channels, status: :ok | :error}` |
 | `[:slackbot, :tier_limiter, :decision]` | `%{count: 1, queue_length: integer}` | `%{method: String.t(), scope_key: term(), decision: :allow | :queue}` |
+| `[:slackbot, :rate_limiter, :decision]` | `%{queue_length: integer, in_flight: integer}` | `%{key: term(), method: String.t(), decision: :allow | :queue | :unknown}` |
+| `[:slackbot, :rate_limiter, :drain]` | `%{drained: integer}` | `%{key: term(), reason: term()}` |
+| `[:slackbot, :ack, :http]` | `%{duration: native}` | `%{status: :ok | :error | :unknown | :exception}` |
 | `[:slackbot, :handler, :dispatch, :start/:stop]` (Telemetry span) | `%{system_time: native}` | `%{type: event_type}` |
 | `[:slackbot, :diagnostics, :record]` | `%{count: 1}` | `%{direction: :inbound | :outbound}` |
 | `[:slackbot, :diagnostics, :replay]` | `%{count: integer}` | `%{filters: map()}` |
@@ -104,6 +111,20 @@ You can always attach your own handlers if you don’t have Phoenix at all:
 
 Because SlackBot uses standard Telemetry primitives, any tool that understands Telemetry
 events (StatsD exporters, OpenTelemetry bridges, etc.) will work out of the box.
+
+## Sample Snapshot (`/demo telemetry`)
+
+The sample router in `examples/basic_bot/` includes a `/demo telemetry` command that uses
+`BasicBot.TelemetryProbe` to subscribe to the events above, roll them up in-memory, and render
+the snapshot as a Block Kit card (cache health, API throughput, limiter queues, connection state,
+and healthcheck status). It’s a practical example of how to consume Telemetry without Phoenix:
+
+1. `BasicBot.TelemetryProbe` calls `:telemetry.attach_many/4` for the SlackBot prefix.
+2. It keeps lightweight counters/last-seen metadata in a GenServer.
+3. The slash command pulls a snapshot and formats it for Slack.
+
+Feel free to lift that module into your own bots if you want a prebuilt telemetry “dashboard”
+inside Slack itself.
 
 ## Exposing Diagnostics in LiveDashboard
 
