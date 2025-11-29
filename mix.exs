@@ -6,6 +6,7 @@ defmodule SlackBot.MixProject do
       app: :slack_bot_ws,
       version: "0.1.0",
       elixir: "~> 1.19",
+      elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/dfeuerbach/slack_bot_ws",
       description: description(),
@@ -61,4 +62,8 @@ defmodule SlackBot.MixProject do
       files: ~w(lib docs mix.exs README.md LICENSE CHANGELOG.md)
     ]
   end
+
+  defp elixirc_paths(:dev), do: ["lib", "examples/basic_bot/lib"]
+  defp elixirc_paths(:test), do: ["lib", "examples/basic_bot/lib"]
+  defp elixirc_paths(_), do: ["lib"]
 end

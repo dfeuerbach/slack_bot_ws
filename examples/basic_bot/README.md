@@ -72,6 +72,7 @@ handler_id = {:basic_bot_rate_limiter, make_ref()}
 - `/demo async-demo`
 - `/demo users`
 - `/demo channels`
+- `/demo telemetry`
 
 When the bot is in a channel:
 

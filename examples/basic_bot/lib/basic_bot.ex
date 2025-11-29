@@ -6,6 +6,7 @@ defmodule BasicBot do
 
   use SlackBot
 
+  alias BasicBot.TelemetryProbe
   alias SlackBot.Cache
 
   middleware(SlackBot.Middleware.Logger)
@@ -93,6 +94,10 @@ defmodule BasicBot do
         sequence do
           literal("channels", as: :mode, value: :channels)
         end
+
+        sequence do
+          literal("telemetry", as: :mode, value: :telemetry)
+        end
       end
     end
 
@@ -124,6 +129,9 @@ defmodule BasicBot do
 
         :channels ->
           demo_channels(channel, ctx)
+
+        :telemetry ->
+          demo_telemetry(channel, ctx)
       end
     end
   end
@@ -239,6 +247,19 @@ defmodule BasicBot do
     body = %{
       channel: channel,
       text: "Joined channels from BasicBot",
+      blocks: blocks
+    }
+
+    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+  end
+
+  defp demo_telemetry(channel, _ctx) do
+    stats = TelemetryProbe.snapshot(BasicBot.SlackBot)
+    blocks = telemetry_blocks(stats)
+
+    body = %{
+      channel: channel,
+      text: "Telemetry snapshot",
       blocks: blocks
     }
 
@@ -376,7 +397,108 @@ defmodule BasicBot do
     `/demo async-demo` - send a series of async messages followed by a final one.
     `/demo users` - show a sample of cached users with basic metadata.
     `/demo channels` - show the channels this bot has joined from the cache.
+    `/demo telemetry` - render a telemetry snapshot (API stats, cache counts, limiters).
     """
+  end
+
+  @doc false
+  def telemetry_blocks(%{
+        generated_at: generated_at,
+        cache: cache,
+        api: api,
+        tier: tier,
+        rate_limiter: rate_limiter,
+        connection: connection,
+        health: health,
+        ack: ack
+      }) do
+    [
+      SlackBot.Blocks.section("*Runtime telemetry snapshot*"),
+      SlackBot.Blocks.context([
+        "Generated at #{DateTime.to_iso8601(generated_at)}"
+      ]),
+      SlackBot.Blocks.divider(),
+      section_with_fields("*Cache & Sync*", cache_fields(cache)),
+      section_with_fields("*API Throughput*", api_fields(api, ack)),
+      section_with_fields("*Rate Limiting*", limiter_fields(rate_limiter, tier)),
+      section_with_fields("*Connection & Health*", connection_fields(connection, health))
+    ]
+  end
+
+  defp cache_fields(%{
+         users: users,
+         channels: channels,
+         last_sync_kind: kind,
+         last_sync_status: status,
+         last_sync_count: count,
+         last_sync_duration_ms: duration_ms
+       }) do
+    [
+      field("*Users cached*\n#{users}"),
+      field("*Channels cached*\n#{channels}"),
+      field("*Last sync*\n#{format_sync(kind, status)}"),
+      field("*Synced records*\n#{count} in #{duration_ms} ms")
+    ]
+  end
+
+  defp api_fields(api, ack) do
+    [
+      field("*Requests*\n#{api.total} (#{api.ok} ok / #{api.error} err)"),
+      field("*Avg latency*\n#{api.avg_duration_ms} ms"),
+      field("*Rate limited*\n#{api.rate_limited} hits"),
+      field("*Slash ack failures*\n#{ack.error}")
+    ]
+  end
+
+  defp limiter_fields(rate_limiter, tier) do
+    tier_busiest =
+      case tier.busiest do
+        {method, queued} -> "#{method} (#{queued})"
+        _ -> "—"
+      end
+
+    [
+      field("*Runtime limiter*\nallow #{rate_limiter.allow} / queue #{rate_limiter.queue}"),
+      field("*Limiter drains*\n#{rate_limiter.drains}"),
+      field("*Tier decisions*\nallow #{tier.allow} / queue #{tier.queue}"),
+      field("*Busiest method*\n#{tier_busiest}")
+    ]
+  end
+
+  defp connection_fields(connection, health) do
+    total_states =
+      connection.states
+      |> Enum.map(fn {state, count} -> "#{state}: #{count}" end)
+      |> Enum.join(" • ")
+      |> case do
+        "" -> "—"
+        text -> text
+      end
+
+    [
+      field("*States observed*\n#{total_states}"),
+      field("*Last state*\n#{connection.last_state || "—"}"),
+      field("*Health status*\n#{(health.disabled && "disabled") || health.last_status || "—"}"),
+      field("*Health failures*\n#{health.failures}")
+    ]
+  end
+
+  defp format_sync(nil, _status), do: "—"
+
+  defp format_sync(kind, status) do
+    "#{kind}/#{status}"
+  end
+
+  defp field(text) do
+    %{type: "mrkdwn", text: text}
+  end
+
+  defp section_with_fields(title, fields) do
+    %{
+      "type" => "section",
+      "text" => SlackBot.Blocks.markdown(title),
+      "fields" => fields
+    }
   end
 
   defp channel_from_payload(%{"channel" => %{"id" => id}}), do: id
