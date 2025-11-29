@@ -1,8 +1,8 @@
-# SlackBot
+# SlackBot (WebSocket)
 
-![SlackBot WS](docs/images/slackbot_ws_logo.png)
+![SlackBot WS](docs/images/slack_bot_ws_logo.png)
 
-SlackBot is a Socket Mode toolkit for building resilient Slack bots in Elixir. It focuses on fast slash-command acknowledgements, supervised event handling, deterministic command parsing, and a configuration surface that stays simple for single bots while scaling to multi-bot, multi-node deployments.
+SlackBot is a performant, resiliant and easy-to-use Slack bot framework. You get fast and graceful slash-command handling, deterministic command parsing, and a supervised event pipeline that stays responsive under load. Slackbot automatically honors Slack's API Tier-aware rate limits, has built-in cache and metadata sync, replayable diagnostics to ease troubleshooting and full Telemetry coverage. Developers get a clean, composable slash command DSL, first-class interactivity routing, and a runtime designed for survivability and observability.
 
 ## Highlights
 - Supervised WebSocket connection manager with rate-limit aware backoff, robust HTTP-based health monitoring, and default per-workspace/per-channel Web API rate limiting that follows Slack’s prescribed limits
@@ -12,6 +12,7 @@ SlackBot is a Socket Mode toolkit for building resilient Slack bots in Elixir. I
 - Slash-command grammar DSL that turns raw `/slash` text into deterministic, structured maps (no manual string-splitting)
 - Native routing for Slack interactivity payloads (global/message shortcuts, message actions, workflow steps, block suggestions, modal submissions)
 - Optional BlockBox integration for composing Block Kit payloads (see [BlockBox docs](https://hexdocs.pm/blockbox/BlockBox.html))
+- Cache-backed `SlackBot.TelemetryStats` collector that attaches to all runtime telemetry, rolls up handler/limiter/cache metrics, and exposes a ready-to-use snapshot for LiveDashboard, PromEx, or whatever reporting surface (the example app’s `/demo telemetry` command shows one way to consume it)
 - Live diagnostics ring buffer with replay plus structured logging and Telemetry hooks
 - Event buffer + provider/mutation queue caches for dedupe and channel/user snapshots
 - Read-through user & channel metadata cache (background sync keeps snapshots fresh, helpers fetch
@@ -94,6 +95,13 @@ override any of the following keys under your bot module’s config:
 
 - **Telemetry**
   - **`telemetry_prefix`**: prefix for all Telemetry events (defaults to `[:slackbot]`).
+  - **`telemetry_stats`**: `[enabled: true, flush_interval_ms: 15_000, ttl_ms: 300_000]` turns on the
+    cache-backed `SlackBot.TelemetryStats` process. It attaches to the bot’s Telemetry prefix,
+    keeps running counters for API calls, handlers, rate/tier limiters, etc., and periodically
+    persists a snapshot via the configured cache adapter (ETS, Redis, etc.). Consumers can read
+    the rolled-up metrics with `SlackBot.TelemetryStats.snapshot/1` or directly from
+    `SlackBot.Cache.metadata/1`. See `docs/telemetry_dashboard.md` for the full field list and
+    LiveDashboard wiring.
 
 - **Cache & event buffer**
   - **`cache`**: choose ETS or a custom adapter:
