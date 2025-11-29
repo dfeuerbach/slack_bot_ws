@@ -96,7 +96,7 @@ defmodule SlackBot.RateLimiter do
       queues: %{},
       # key => non_neg_integer()
       in_flight: %{},
-      # key => reference()
+      # key => %{ref: reference(), delay_ms: integer(), method: term()}
       release_timers: %{}
     }
 
@@ -151,7 +151,8 @@ defmodule SlackBot.RateLimiter do
 
               :error ->
                 ref = Process.send_after(self(), {:release_key, key}, delay)
-                Map.put(state.release_timers, key, ref)
+                emit_blocked(state.config, key, method, delay)
+                Map.put(state.release_timers, key, %{ref: ref, delay_ms: delay, method: method})
             end
           else
             state.release_timers
@@ -204,7 +205,8 @@ defmodule SlackBot.RateLimiter do
 
                 :error ->
                   ref = Process.send_after(self(), {:release_key, key}, delay)
-                  Map.put(state.release_timers, key, ref)
+                  emit_blocked(state.config, key, method, delay)
+                  Map.put(state.release_timers, key, %{ref: ref, delay_ms: delay, method: method})
               end
 
             {queues, in_flight_map, release_timers, newest_adapter_state}
@@ -242,7 +244,7 @@ defmodule SlackBot.RateLimiter do
     queue = Map.get(state.queues, key, :queue.new())
     in_flight = Map.get(state.in_flight, key, 0)
 
-    release_timers = Map.delete(state.release_timers, key)
+    {timer_info, release_timers} = Map.pop(state.release_timers, key)
 
     {queues, in_flight_map, release_timers} =
       cond do
@@ -250,7 +252,14 @@ defmodule SlackBot.RateLimiter do
           # Still blocked; reschedule.
           delay = max(blocked_until - now, 1)
           ref = Process.send_after(self(), {:release_key, key}, delay)
-          {state.queues, state.in_flight, Map.put(release_timers, key, ref)}
+          method = timer_method(timer_info)
+          emit_blocked(state.config, key, method, delay)
+
+          {
+            state.queues,
+            state.in_flight,
+            Map.put(release_timers, key, %{ref: ref, delay_ms: delay, method: method})
+          }
 
         in_flight > 0 or :queue.is_empty(queue) ->
           {state.queues, state.in_flight, release_timers}
@@ -259,7 +268,7 @@ defmodule SlackBot.RateLimiter do
           {{:value, queued_from}, queue} = :queue.out(queue)
           queues = update_queue_map(state.queues, key, queue)
 
-          emit_drain(state.config, key, 1)
+          emit_drain(state.config, key, 1, delay_ms: timer_delay(timer_info))
           emit_decision(state.config, key, :unknown, :allow, :queue.len(queue), 1)
 
           GenServer.reply(queued_from, :ok)
@@ -322,14 +331,40 @@ defmodule SlackBot.RateLimiter do
     )
   end
 
-  defp emit_drain(config, key, drained) do
+  defp emit_blocked(config, key, method, delay_ms) do
+    Telemetry.execute(
+      config,
+      [:rate_limiter, :blocked],
+      %{delay_ms: delay_ms},
+      %{key: key, method: method}
+    )
+  end
+
+  defp emit_drain(config, key, drained, opts) do
+    measurements =
+      %{drained: drained}
+      |> maybe_put_measurement(:delay_ms, opts[:delay_ms])
+
     Telemetry.execute(
       config,
       [:rate_limiter, :drain],
-      %{drained: drained},
-      %{key: key, reason: :retry_after}
+      measurements,
+      %{key: key, reason: Keyword.get(opts, :reason, :retry_after)}
     )
   end
+
+  defp maybe_put_measurement(map, _key, nil), do: map
+
+  defp maybe_put_measurement(map, key, value) when is_integer(value) and value >= 0,
+    do: Map.put(map, key, value)
+
+  defp maybe_put_measurement(map, _key, _value), do: map
+
+  defp timer_delay(%{delay_ms: delay}) when is_integer(delay), do: delay
+  defp timer_delay(_), do: nil
+
+  defp timer_method(%{method: method}) when not is_nil(method), do: method
+  defp timer_method(_), do: :unknown
 
   defp maybe_emit_rate_limited(config, key, method, {:error, {:rate_limited, secs}}, now)
        when is_integer(secs) and secs > 0 do

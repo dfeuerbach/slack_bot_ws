@@ -224,10 +224,12 @@ defmodule SlackBot.ConnectionManager do
 
     case EventBuffer.record(state.config, key, envelope) do
       :duplicate when not is_nil(key) ->
+        emit_pipeline_ingress(state.config, :duplicate, type, envelope)
         Logger.debug("[SlackBot] duplicate envelope #{key}, skipping")
         {:noreply, state}
 
       _ ->
+        emit_pipeline_ingress(state.config, :queue, type, envelope)
         Logger.debug("[SlackBot] dispatching type=#{type} payload=#{inspect(payload)}")
 
         Diagnostics.record(state.config, :inbound, %{
@@ -253,29 +255,66 @@ defmodule SlackBot.ConnectionManager do
       assigns: config.assigns
     }
 
+    envelope_id = envelope_id(envelope)
+
     Telemetry.span(
       config,
       [:handler, :dispatch],
-      %{type: type},
+      %{type: type, envelope_id: envelope_id},
       fn ->
-        result =
-          Logging.with_envelope(envelope, payload, fn ->
-            try do
-              config.module.handle_event(type, payload, context)
-            rescue
-              exception ->
-                Logger.error(Exception.format(:error, exception, __STACKTRACE__))
-                {:error, exception}
-            end
-          end)
+        {result, status} = execute_handler(config, type, payload, context, envelope)
 
-        {result, %{type: type}}
+        metadata = %{
+          type: type,
+          envelope_id: envelope_id,
+          status: status
+        }
+
+        {result, metadata}
       end
     )
   end
 
+  defp execute_handler(config, type, payload, context, envelope) do
+    case safe_handle_event(config, type, payload, context, envelope) do
+      {:ok, result} ->
+        {result, classify_result(result)}
+
+      {:exception, result} ->
+        {result, :exception}
+    end
+  end
+
+  defp safe_handle_event(config, type, payload, context, envelope) do
+    {:ok,
+     Logging.with_envelope(envelope, payload, fn ->
+       config.module.handle_event(type, payload, context)
+     end)}
+  rescue
+    exception ->
+      Logger.error(Exception.format(:error, exception, __STACKTRACE__))
+      {:exception, {:error, exception}}
+  end
+
+  defp classify_result({:error, _}), do: :error
+  defp classify_result({:halt, _}), do: :halted
+  defp classify_result(_), do: :ok
+
   defp envelope_id(%{"envelope_id" => id}), do: id
   defp envelope_id(_), do: nil
+
+  defp emit_pipeline_ingress(config, decision, type, envelope) do
+    Telemetry.execute(
+      config,
+      [:handler, :ingress],
+      %{count: 1},
+      %{
+        decision: decision,
+        type: type,
+        envelope_id: envelope_id(envelope)
+      }
+    )
+  end
 
   defp maybe_update_cache(
          "member_joined_channel",

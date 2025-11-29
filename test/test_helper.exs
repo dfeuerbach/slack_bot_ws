@@ -8,6 +8,20 @@ defmodule SlackBot.TestHandler do
       send(test_pid, {:handled, type, payload, ctx})
     end
 
-    :ok
+    cond do
+      truthy?(payload["raise"]) ->
+        raise "forced-test-error"
+
+      truthy?(payload["handler_error"]) ->
+        {:error, :forced_error}
+
+      truthy?(payload["handler_halt"]) ->
+        {:halt, :forced_halt}
+
+      true ->
+        :ok
+    end
   end
+
+  defp truthy?(value), do: value in [true, "true", 1]
 end

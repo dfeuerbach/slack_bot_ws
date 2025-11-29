@@ -207,5 +207,76 @@ defmodule SlackBot.RateLimiterTest do
                       %{retry_after_ms: 2000, observed_at_ms: _},
                       %{method: "chat.postMessage", key: {:channel, "C-telemetry"}}}
     end
+
+    test "emits blocked and drain telemetry for retry-after windows" do
+      instance = __MODULE__.BlockedInstance
+
+      config =
+        base_config(
+          instance_name: instance,
+          telemetry_prefix: [:slackbot],
+          rate_limiter: {:adapter, ETS, table: :rate_limiter_blocked_table}
+        )
+
+      start_supervised!(RateLimiter.child_spec(config))
+
+      parent = self()
+      blocked_handler = {:rate_blocked, make_ref()}
+      drain_handler = {:rate_drain, make_ref()}
+
+      :telemetry.attach(
+        blocked_handler,
+        [:slackbot, :rate_limiter, :blocked],
+        fn event, measurements, metadata, _ ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      :telemetry.attach(
+        drain_handler,
+        [:slackbot, :rate_limiter, :drain],
+        fn event, measurements, metadata, _ ->
+          send(parent, {:telemetry, event, measurements, metadata})
+        end,
+        nil
+      )
+
+      on_exit(fn ->
+        :telemetry.detach(blocked_handler)
+        :telemetry.detach(drain_handler)
+      end)
+
+      # First call records a retry-after window.
+      RateLimiter.around_request(
+        config,
+        "chat.postMessage",
+        %{"channel" => "C-block"},
+        fn -> {:error, {:rate_limited, 1}} end
+      )
+
+      task =
+        Task.async(fn ->
+          RateLimiter.around_request(
+            config,
+            "chat.postMessage",
+            %{"channel" => "C-block"},
+            fn -> :ok end
+          )
+        end)
+
+      assert_receive {:telemetry, [:slackbot, :rate_limiter, :blocked], %{delay_ms: delay_ms},
+                      %{key: {:channel, "C-block"}, method: "chat.postMessage"}}
+
+      assert_in_delta(delay_ms, 1000, 200)
+
+      assert_receive {:telemetry, [:slackbot, :rate_limiter, :drain],
+                      %{drained: 1, delay_ms: drain_delay},
+                      %{key: {:channel, "C-block"}, reason: :retry_after}}, 1_500
+
+      assert_in_delta(drain_delay, 1000, 200)
+
+      assert :ok = Task.await(task, 2_000)
+    end
   end
 end

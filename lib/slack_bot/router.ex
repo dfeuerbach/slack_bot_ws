@@ -40,6 +40,7 @@ defmodule SlackBot.Router do
   require Logger
 
   alias SlackBot.SlashAck
+  alias SlackBot.Telemetry
 
   defmacro __using__(opts) do
     quote location: :keep do
@@ -308,6 +309,7 @@ defmodule SlackBot.Router do
         run_middlewares(rest, type, new_payload, new_ctx, fun)
 
       {:halt, response} ->
+        emit_middleware_halt(ctx, type, middleware, response)
         {:halt, response}
     end
   end
@@ -320,6 +322,42 @@ defmodule SlackBot.Router do
 
   defp apply_middleware(fun, type, payload, ctx) when is_atom(fun),
     do: apply(fun, :call, [type, payload, ctx])
+
+  defp emit_middleware_halt(ctx, type, middleware, response) do
+    case ctx do
+      %{config: config} ->
+        Telemetry.execute(
+          config,
+          [:handler, :middleware, :halt],
+          %{count: 1},
+          %{
+            type: type,
+            middleware: middleware_name(middleware),
+            response: response_summary(response),
+            envelope_id: ctx_envelope_id(ctx)
+          }
+        )
+
+      _ ->
+        :ok
+    end
+  end
+
+  defp ctx_envelope_id(%{envelope: %{"envelope_id" => id}}), do: id
+  defp ctx_envelope_id(%{envelope: %{envelope_id: id}}), do: id
+  defp ctx_envelope_id(_), do: nil
+
+  defp middleware_name({module, function}) when is_atom(module) and is_atom(function),
+    do: "#{inspect(module)}.#{function}"
+
+  defp middleware_name(module) when is_atom(module), do: inspect(module)
+  defp middleware_name(fun) when is_function(fun), do: inspect(fun)
+  defp middleware_name(other), do: inspect(other)
+
+  defp response_summary(response) do
+    response
+    |> inspect(limit: 5, printable_limit: 200)
+  end
 
   @doc false
   def __normalize_block__({:__block__, _, exprs}), do: exprs

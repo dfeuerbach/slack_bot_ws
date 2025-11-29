@@ -85,7 +85,7 @@ defmodule SlackBot.TierLimiter do
 
         if bucket.tokens >= 1 and :queue.is_empty(bucket.queue) do
           bucket = spend_token(bucket)
-          emit_decision(state.config, method, scope_key, :allow, 0)
+          emit_decision(state.config, method, scope_key, :allow, 0, bucket.tokens)
           {:reply, :ok, put_bucket(state, bucket_key, bucket)}
         else
           bucket = enqueue_waiter(bucket, from, method)
@@ -96,7 +96,8 @@ defmodule SlackBot.TierLimiter do
             method,
             scope_key,
             :queue,
-            :queue.len(bucket.queue)
+            :queue.len(bucket.queue),
+            bucket.tokens
           )
 
           {:noreply, put_bucket(state, bucket_key, bucket)}
@@ -113,7 +114,9 @@ defmodule SlackBot.TierLimiter do
       {:ok, bucket} ->
         bucket = cancel_timer(bucket)
         now = now_ms()
+        was_suspended? = suspended?(bucket)
         bucket = refill(bucket, now)
+        bucket = maybe_emit_resume(bucket, state.config, was_suspended?)
 
         {bucket, replies} = allow_waiters(bucket, state.config)
 
@@ -144,7 +147,9 @@ defmodule SlackBot.TierLimiter do
         bucket =
           bucket
           |> cancel_timer()
-          |> suspend_bucket(now, delay_ms)
+          |> suspend_bucket(now, delay_ms, method)
+
+        emit_suspend(state.config, method, scope_key, delay_ms)
 
         {:noreply, put_bucket(state, bucket_key, bucket)}
     end
@@ -165,7 +170,8 @@ defmodule SlackBot.TierLimiter do
       last_refill_ms: now,
       suspended_until: nil,
       queue: :queue.new(),
-      timer_ref: nil
+      timer_ref: nil,
+      last_suspended_method: nil
     }
   end
 
@@ -250,7 +256,14 @@ defmodule SlackBot.TierLimiter do
       bucket.tokens >= 1 ->
         {{:value, {from, method}}, queue} = :queue.out(bucket.queue)
         bucket = %{bucket | queue: queue} |> spend_token()
-        emit_decision(config, method, bucket.scope_key, :allow, :queue.len(bucket.queue))
+        emit_decision(
+          config,
+          method,
+          bucket.scope_key,
+          :allow,
+          :queue.len(bucket.queue),
+          bucket.tokens
+        )
         do_allow_waiters(bucket, config, [from | replies])
 
       true ->
@@ -258,14 +271,17 @@ defmodule SlackBot.TierLimiter do
     end
   end
 
-  defp emit_decision(config, method, scope_key, decision, queue_length) do
+  defp emit_decision(config, method, scope_key, decision, queue_length, tokens) do
     Telemetry.execute(
       config,
       [:tier_limiter, :decision],
-      %{count: 1, queue_length: queue_length},
+      %{count: 1, queue_length: queue_length, tokens: normalize_tokens(tokens)},
       %{method: method, scope_key: scope_key, decision: decision}
     )
   end
+
+  defp normalize_tokens(value) when is_number(value), do: Float.round(value, 4)
+  defp normalize_tokens(_), do: 0.0
 
   defp put_bucket(state, key, bucket) do
     %{state | buckets: Map.put(state.buckets, key, bucket)}
@@ -312,9 +328,15 @@ defmodule SlackBot.TierLimiter do
     max(tokens, 0.0)
   end
 
-  defp suspend_bucket(bucket, now, delay_ms) do
+  defp suspend_bucket(bucket, now, delay_ms, method) do
     resume_at = now + delay_ms
-    %{bucket | tokens: 0.0, last_refill_ms: resume_at, suspended_until: resume_at}
+    %{
+      bucket
+      | tokens: 0.0,
+        last_refill_ms: resume_at,
+        suspended_until: resume_at,
+        last_suspended_method: method
+    }
   end
 
   defp cancel_timer(%{timer_ref: nil} = bucket), do: bucket
@@ -325,4 +347,43 @@ defmodule SlackBot.TierLimiter do
   end
 
   defp now_ms, do: System.monotonic_time(:millisecond)
+
+  defp emit_suspend(config, method, scope_key, delay_ms) do
+    Telemetry.execute(
+      config,
+      [:tier_limiter, :suspend],
+      %{delay_ms: delay_ms},
+      %{method: method, scope_key: scope_key}
+    )
+  end
+
+  defp emit_resume(config, bucket) do
+    Telemetry.execute(
+      config,
+      [:tier_limiter, :resume],
+      %{
+        tokens: normalize_tokens(bucket.tokens),
+        queue_length: :queue.len(bucket.queue)
+      },
+      %{
+        bucket_id: bucket.bucket_id,
+        scope_key: bucket.scope_key,
+        method: bucket.last_suspended_method
+      }
+    )
+  end
+
+  defp suspended?(%{suspended_until: value}) when is_integer(value), do: true
+  defp suspended?(_), do: false
+
+  defp maybe_emit_resume(bucket, _config, false), do: bucket
+
+  defp maybe_emit_resume(bucket, config, true) do
+    if suspended?(bucket) do
+      bucket
+    else
+      emit_resume(config, bucket)
+      %{bucket | last_suspended_method: nil}
+    end
+  end
 end

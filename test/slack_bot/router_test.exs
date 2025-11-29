@@ -140,6 +140,34 @@ defmodule SlackBot.RouterTest do
     refute_receive {:second_handler, _}
   end
 
+  test "emits telemetry when middleware halts the pipeline" do
+    parent = self()
+    handler_id = {:middleware_halt, make_ref()}
+
+    :telemetry.attach(
+      handler_id,
+      [:slackbot, :handler, :middleware, :halt],
+      fn event, measurements, metadata, _ ->
+        send(parent, {:telemetry_event, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler_id) end)
+
+    ctx = ctx(HaltingRouter)
+
+    assert {:halt, {:blocked, "hi"}} =
+             HaltingRouter.handle_event("message", %{"text" => "hi"}, ctx)
+
+    assert_receive {:telemetry_event, [:slackbot, :handler, :middleware, :halt], %{count: 1},
+                    %{middleware: "SlackBot.RouterTest.HaltMiddleware", type: "message"} =
+                      metadata}
+
+    assert metadata.response =~ "blocked"
+    assert metadata.envelope_id == nil
+  end
+
   defmodule GrammarRouter do
     use SlackBot
 

@@ -17,6 +17,7 @@ defmodule SlackBot.TierLimiterTest do
         module: SlackBot.TestHandler,
         instance_name: __MODULE__.Bot
       )
+      |> Map.put(:telemetry_prefix, [:slackbot])
 
     start_supervised!(TierLimiter.child_spec(config))
 
@@ -102,6 +103,80 @@ defmodule SlackBot.TierLimiterTest do
     refute Task.yield(task, 50)
     Process.sleep(120)
     assert :ok = Task.await(task, 150)
+  end
+
+  test "emits telemetry for decisions, suspensions, and resumes", %{config: config} do
+    set_tiers(%{"users.list" => %{max_calls: 1, window_ms: 60, scope: :workspace}})
+
+    parent = self()
+    decision_handler = {:tier_decision, make_ref()}
+    suspend_handler = {:tier_suspend, make_ref()}
+    resume_handler = {:tier_resume, make_ref()}
+
+    :telemetry.attach(
+      decision_handler,
+      [:slackbot, :tier_limiter, :decision],
+      fn event, measurements, metadata, _ ->
+        send(parent, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    :telemetry.attach(
+      suspend_handler,
+      [:slackbot, :tier_limiter, :suspend],
+      fn event, measurements, metadata, _ ->
+        send(parent, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    :telemetry.attach(
+      resume_handler,
+      [:slackbot, :tier_limiter, :resume],
+      fn event, measurements, metadata, _ ->
+        send(parent, {:telemetry, event, measurements, metadata})
+      end,
+      nil
+    )
+
+    on_exit(fn ->
+      :telemetry.detach(decision_handler)
+      :telemetry.detach(suspend_handler)
+      :telemetry.detach(resume_handler)
+    end)
+
+    assert :ok = TierLimiter.acquire(config, "users.list", %{})
+
+    assert_receive {:telemetry, [:slackbot, :tier_limiter, :decision],
+                    %{tokens: tokens, queue_length: 0},
+                    %{method: "users.list", decision: :allow}}
+
+    assert is_number(tokens)
+
+    TierLimiter.suspend(config, "users.list", %{}, 50)
+
+    assert_receive {:telemetry, [:slackbot, :tier_limiter, :suspend], %{delay_ms: delay},
+                    %{method: "users.list", scope_key: scope_key}}
+
+    assert scope_key == config.instance_name
+
+    assert delay >= 50
+
+    task =
+      Task.async(fn ->
+        TierLimiter.acquire(config, "users.list", %{})
+      end)
+
+    refute Task.yield(task, 20)
+
+    assert_receive {:telemetry, [:slackbot, :tier_limiter, :resume],
+                    %{tokens: _resume_tokens, queue_length: _},
+                    %{method: "users.list", scope_key: resume_scope_key}}, 200
+
+    assert resume_scope_key == config.instance_name
+
+    assert :ok = Task.await(task, 200)
   end
 
   defp set_tiers(tiers) when is_map(tiers) do
