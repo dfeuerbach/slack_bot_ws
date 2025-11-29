@@ -51,6 +51,11 @@ defmodule SlackBot.Config do
       page_limit: :infinity,
       include_presence: false,
       users_conversations_opts: %{}
+    },
+    telemetry_stats: %{
+      enabled: false,
+      flush_interval_ms: 15_000,
+      ttl_ms: 300_000
     }
   ]
 
@@ -97,6 +102,11 @@ defmodule SlackBot.Config do
             page_limit: pos_integer() | :infinity,
             include_presence: boolean(),
             users_conversations_opts: map()
+          },
+          telemetry_stats: %{
+            enabled: boolean(),
+            flush_interval_ms: pos_integer(),
+            ttl_ms: pos_integer()
           }
         }
 
@@ -165,7 +175,8 @@ defmodule SlackBot.Config do
          {:ok, log_level} <- fetch_log_level(opts),
          {:ok, health_check} <- fetch_health_check(opts),
          {:ok, user_cache} <- fetch_user_cache(opts),
-         {:ok, cache_sync} <- fetch_cache_sync(opts) do
+         {:ok, cache_sync} <- fetch_cache_sync(opts),
+         {:ok, telemetry_stats} <- fetch_telemetry_stats(opts) do
       {:ok,
        struct!(__MODULE__, %{
          app_token: app_token,
@@ -189,7 +200,8 @@ defmodule SlackBot.Config do
          instance_name: Keyword.get(opts, :instance_name),
          health_check: health_check,
          user_cache: user_cache,
-         cache_sync: cache_sync
+         cache_sync: cache_sync,
+         telemetry_stats: telemetry_stats
        })}
     end
   end
@@ -409,6 +421,29 @@ defmodule SlackBot.Config do
          true <- positive?(cleanup) || {:error, {:invalid_user_cache_cleanup, cleanup}} do
       {:ok, value}
     else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_telemetry_stats(opts) do
+    raw = Keyword.get(opts, :telemetry_stats, [])
+    defaults = %{enabled: false, flush_interval_ms: 15_000, ttl_ms: 300_000}
+
+    map =
+      cond do
+        is_list(raw) -> Map.merge(defaults, Map.new(raw))
+        is_map(raw) -> Map.merge(defaults, raw)
+        is_boolean(raw) -> Map.put(defaults, :enabled, raw)
+        true -> :invalid
+      end
+
+    with %{enabled: enabled, flush_interval_ms: flush, ttl_ms: ttl} = value when map != :invalid <- map,
+         true <- is_boolean(enabled) || {:error, {:invalid_telemetry_stats_enabled, enabled}},
+         true <- positive?(flush) || {:error, {:invalid_telemetry_stats_flush, flush}},
+         true <- positive?(ttl) || {:error, {:invalid_telemetry_stats_ttl, ttl}} do
+      {:ok, value}
+    else
+      :invalid -> {:error, {:invalid_telemetry_stats_option, raw}}
       {:error, reason} -> {:error, reason}
     end
   end

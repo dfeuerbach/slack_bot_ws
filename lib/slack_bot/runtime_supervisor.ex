@@ -34,6 +34,7 @@ defmodule SlackBot.RuntimeSupervisor do
         {Finch, api_pool_opts}
       ]
       |> Kernel.++(SlackBot.Cache.child_specs(config))
+      |> Kernel.++(telemetry_stats_child_specs(config))
       |> Kernel.++(tier_limiter_child_specs(config))
       |> Kernel.++(rate_limiter_child_specs(config))
       |> Kernel.++([SlackBot.EventBuffer.child_spec(config)])
@@ -92,4 +93,10 @@ defmodule SlackBot.RuntimeSupervisor do
       []
     end
   end
+
+  defp telemetry_stats_child_specs(%SlackBot.Config{telemetry_stats: %{enabled: true}} = config) do
+    [SlackBot.TelemetryStats.child_spec(config)]
+  end
+
+  defp telemetry_stats_child_specs(_config), do: []
 end
