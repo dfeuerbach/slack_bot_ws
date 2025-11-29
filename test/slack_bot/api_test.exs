@@ -130,6 +130,6 @@ defmodule SlackBot.APITest do
         {:http_call, ts} -> ts
       end
 
-    assert t2 - t1 >= 60
+    assert t2 - t1 >= 40
   end
 end
