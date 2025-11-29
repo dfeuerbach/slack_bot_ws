@@ -9,7 +9,8 @@ This sample Mix project shows how to wire SlackBot into an OTP application with:
 - optional BlockBox helpers (falls back to map builders if not installed),
 - explicit ephemeral messaging and async Web API usage,
 - robust connection health monitoring and automatic reconnects via the library’s HTTP-based health checks,
-- per-channel Web API rate limiting using the library’s default rate limiter.
+- per-channel Web API rate limiting using the library’s default rate limiter,
+- a cache-backed `telemetry_stats` aggregator so `/demo telemetry` can surface handler outcomes, limiter queue lengths, tier suspensions/resumes, cache sync status, and health information without wiring extra Telemetry handlers.
 
 ## Prerequisites
 
@@ -73,6 +74,17 @@ handler_id = {:basic_bot_rate_limiter, make_ref()}
 - `/demo users`
 - `/demo channels`
 - `/demo telemetry`
+
+### Telemetry snapshot
+
+The example enables `telemetry_stats` in `config/config.exs`, so the `/demo telemetry` command renders a Block Kit card backed by `SlackBot.TelemetryStats.snapshot/1`. The card now explains:
+
+- cache coverage (user/channel counts) and the most recent cache sync (kind, status, records processed, and duration),
+- API throughput (success/error counts, average latency, rate-limit hits, latest method) plus handler pipeline outcomes (ok/error/exception/halted, ingress vs. duplicates, middleware halts, slash ack status),
+- runtime rate limiter activity (allow/queue counts, drains, most recent block delay) and tier limiter state (tokens remaining, per-method queueing, suspensions/resumes with scope/delay details),
+- connection states, rate-limited reconnects, and the latest health-check status.
+
+If you disable `telemetry_stats`, the command falls back to the lightweight `TelemetryProbe` counters, but you won’t get the richer handler/limiter insights—keep the aggregator on for the full experience. The snapshot uses whatever cache adapter your bot is configured with (ETS in this example), so it works the same if you swap the cache for Redis.
 
 When the bot is in a channel:
 
