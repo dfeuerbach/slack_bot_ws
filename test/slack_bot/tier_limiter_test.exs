@@ -179,6 +179,37 @@ defmodule SlackBot.TierLimiterTest do
     assert :ok = Task.await(task, 200)
   end
 
+  test "normalizes integer token values before emitting telemetry", %{config: config} do
+    parent = self()
+    handler = {:tier_decision_tokens, make_ref()}
+
+    :telemetry.attach(
+      handler,
+      [:slackbot, :tier_limiter, :decision],
+      fn _event, measurements, _metadata, _ ->
+        send(parent, {:decision, measurements})
+      end,
+      nil
+    )
+
+    on_exit(fn -> :telemetry.detach(handler) end)
+
+    set_tiers(%{
+      "custom.method" => %{
+        max_calls: 4,
+        window_ms: 80,
+        scope: :workspace,
+        burst_ratio: 0.0,
+        initial_fill_ratio: 1.0
+      }
+    })
+
+    assert :ok = TierLimiter.acquire(config, "custom.method", %{})
+
+    assert_receive {:decision, %{tokens: tokens}}, 100
+    assert is_float(tokens)
+  end
+
   defp set_tiers(tiers) when is_map(tiers) do
     Application.put_env(:slack_bot_ws, SlackBot.TierRegistry, tiers: tiers)
   end

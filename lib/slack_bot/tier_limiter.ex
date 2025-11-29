@@ -280,7 +280,11 @@ defmodule SlackBot.TierLimiter do
     )
   end
 
-  defp normalize_tokens(value) when is_number(value), do: Float.round(value, 4)
+  defp normalize_tokens(value) when is_number(value) do
+    value
+    |> :erlang.float()
+    |> Float.round(4)
+  end
   defp normalize_tokens(_), do: 0.0
 
   defp put_bucket(state, key, bucket) do
