@@ -21,7 +21,8 @@ defmodule SlackBot.MixProject do
           "docs/slash_grammar.md",
           "docs/diagnostics.md",
           "docs/telemetry_dashboard.md"
-        ]
+        ],
+        assets: %{"docs/images" => "docs/images"}
       ]
     ]
   end
@@ -43,7 +44,8 @@ defmodule SlackBot.MixProject do
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
       {:redix, "~> 1.2", optional: true},
-      {:igniter, "~> 0.6", optional: true}
+      {:igniter, "~> 0.6", optional: true},
+      {:ex_doc, "~> 0.39.1", only: :dev, runtime: false}
     ]
   end
 
