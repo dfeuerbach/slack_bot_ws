@@ -1,11 +1,5 @@
 defmodule SlackBot.Supervisor do
-  @moduledoc """
-  Top-level supervisor responsible for bootstrapping SlackBot runtime services.
-
-  Phase 1 starts the configuration server and a placeholder runtime supervisor.
-  Future phases will attach connection managers, caches, and other workers under
-  the runtime supervisor so that the root layout remains stable.
-  """
+  @moduledoc false
 
   use Supervisor
 

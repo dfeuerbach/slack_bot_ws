@@ -1,41 +1,5 @@
 defmodule SlackBot.Router do
-  @moduledoc """
-  Declarative handler DSL and middleware pipeline for SlackBot bots.
-
-  By `use`-ing `SlackBot` (which delegates to this module), a bot gains macros to
-  register event handlers, slash-command handlers, and middleware callbacks. At runtime,
-  the connection manager process consults those definitions to dispatch incoming Socket
-  Mode events.
-
-  ## Example
-  For a deeper tour of the DSL, see `docs/slash_grammar.md`.
-
-      defmodule MyBot do
-        use SlackBot
-
-        middleware SlackBot.Middleware.Logger
-
-        handle_event "message", event, ctx do
-          respond(event["channel"], "Hello from \#{ctx.assigns.bot_name}")
-        end
-
-        slash "/deploy" do
-          grammar do
-            value :service
-            optional literal("short", as: :short?)
-            repeat do
-              literal "param"
-              value :params
-            end
-          end
-
-          handle payload, ctx do
-            parsed = payload["parsed"]
-            Deployments.kick(parsed.service, parsed.params, ctx)
-          end
-        end
-      end
-  """
+  @moduledoc false
 
   require Logger
 
@@ -260,11 +224,17 @@ defmodule SlackBot.Router do
       type == "slash_commands" ->
         case find_slash_handler(handlers, payload) do
           nil ->
-            Logger.debug("[SlackBot.Router] no slash handler for command=#{inspect(payload["command"])}")
+            Logger.debug(
+              "[SlackBot.Router] no slash handler for command=#{inspect(payload["command"])}"
+            )
+
             :ok
 
           {:slash_dsl, command, fun, grammar, opts} ->
-            Logger.debug("[SlackBot.Router] dispatching slash command=#{command} payload=#{inspect(payload)}")
+            Logger.debug(
+              "[SlackBot.Router] dispatching slash command=#{command} payload=#{inspect(payload)}"
+            )
+
             handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
         end
 
