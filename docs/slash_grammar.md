@@ -195,10 +195,18 @@ Every DSL handler receives an enriched payload under `payload["parsed"]`:
 
 ---
 
-## Tips and next steps
+## Tips
 
-- Use `SlackBot.Diagnostics.list/2` + `replay/2` to capture real commands and verify they
-  parse as expected.
+- Use `SlackBot.Diagnostics.list/2` + `replay/2` to capture real commands and verify they parse as expected.
 - Prefer small, focused `choice` branches over one giant handler with nested `case`.
 - Need raw tokens? Call `SlackBot.Command.lex/1` yourself.
-- See `README.md` and `test/slack_bot/router_test.exs` for more real-world examples.
+- See `test/slack_bot/router_test.exs` for more real-world examples.
+
+---
+
+## Next Steps
+
+- [Getting Started](getting_started.md) — set up a Slack App and run your first handler
+- [Rate Limiting](rate_limiting.md) — understand how SlackBot paces Web API calls
+- [Diagnostics](diagnostics.md) — capture and replay commands for debugging
+- [Telemetry Dashboard](telemetry_dashboard.md) — monitor handler execution and timing

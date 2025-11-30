@@ -1,31 +1,29 @@
 # Telemetry & LiveDashboard Guide
 
-SlackBot emits a handful of Telemetry events so you can monitor socket-mode health
-without bolting custom instrumentation onto each handler. This guide shows how to listen
-to those events and surface them in Phoenix LiveDashboard (or any Telemetry consumer).
+SlackBot emits Telemetry events across its internal systems—connection lifecycle, API calls, rate and tier limiters, handler execution, cache sync, and diagnostics—so you can monitor your bot's health without bolting custom instrumentation onto each handler. This guide shows how to listen to those events and surface them in Phoenix LiveDashboard (or any Telemetry consumer).
 
 ## Available Events
 
 | Event | Measurements | Metadata |
 | --- | --- | --- |
-| `[:slackbot, :api, :request]` | `%{duration: native}` | `%{method: String.t(), status: :ok | :error | :exception | :unknown}` |
+| `[:slackbot, :api, :request]` | `%{duration: native}` | `%{method: String.t(), status: :ok \| :error \| :exception \| :unknown}` |
 | `[:slackbot, :api, :rate_limited]` | `%{retry_after_ms: integer, observed_at_ms: integer}` | `%{method: String.t(), key: term()}` |
-| `[:slackbot, :connection, :state]` | `%{count: 1}` | `%{state: :connected | :disconnected | :terminated | :down | :error, reason: term()}` |
+| `[:slackbot, :connection, :state]` | `%{count: 1}` | `%{state: :connected \| :disconnected \| :terminated \| :down \| :error, reason: term()}` |
 | `[:slackbot, :connection, :rate_limited]` | `%{delay_ms: integer}` | `%{}` |
-| `[:slackbot, :healthcheck, :ping]` | `%{duration: native}` / `%{delay_ms: integer}` | `%{status: :ok | :error | :fatal | :rate_limited | :unknown, reason: term()}` |
+| `[:slackbot, :healthcheck, :ping]` | `%{duration: native}` / `%{delay_ms: integer}` | `%{status: :ok \| :error \| :fatal \| :rate_limited \| :unknown, reason: term()}` |
 | `[:slackbot, :healthcheck, :disabled]` | `%{count: 1}` | `%{}` |
-| `[:slackbot, :cache, :sync]` | `%{duration: native, count: integer}` | `%{kind: :users | :channels, status: :ok | :error}` |
-| `[:slackbot, :tier_limiter, :decision]` | `%{count: 1, queue_length: integer, tokens: float}` | `%{method: String.t(), scope_key: term(), decision: :allow | :queue | :other}` |
+| `[:slackbot, :cache, :sync]` | `%{duration: native, count: integer}` | `%{kind: :users \| :channels, status: :ok \| :error}` |
+| `[:slackbot, :tier_limiter, :decision]` | `%{count: 1, queue_length: integer, tokens: float}` | `%{method: String.t(), scope_key: term(), decision: :allow \| :queue \| :other}` |
 | `[:slackbot, :tier_limiter, :suspend]` | `%{delay_ms: integer}` | `%{method: String.t(), scope_key: term()}` |
-| `[:slackbot, :tier_limiter, :resume]` | `%{queue_length: integer, tokens: float}` | `%{method: String.t() | nil, scope_key: term(), bucket_id: term()}` |
-| `[:slackbot, :rate_limiter, :decision]` | `%{queue_length: integer, in_flight: integer}` | `%{key: term(), method: String.t(), decision: :allow | :queue | :unknown}` |
+| `[:slackbot, :tier_limiter, :resume]` | `%{queue_length: integer, tokens: float}` | `%{method: String.t() \| nil, scope_key: term(), bucket_id: term()}` |
+| `[:slackbot, :rate_limiter, :decision]` | `%{queue_length: integer, in_flight: integer}` | `%{key: term(), method: String.t(), decision: :allow \| :queue \| :unknown}` |
 | `[:slackbot, :rate_limiter, :blocked]` | `%{delay_ms: integer}` | `%{key: term(), method: String.t()}` |
-| `[:slackbot, :rate_limiter, :drain]` | `%{drained: integer, delay_ms: integer | nil}` | `%{key: term(), reason: term()}` |
-| `[:slackbot, :handler, :ingress]` | `%{count: 1}` | `%{decision: :queue | :duplicate, type: String.t(), envelope_id: String.t() | nil}` |
-| `[:slackbot, :handler, :dispatch, :start/:stop]` (span) | `%{system_time: native}` / `%{duration: native}` | `%{type: event_type, status: :ok | :error | :exception | :halted, envelope_id: String.t() | nil}` |
-| `[:slackbot, :handler, :middleware, :halt]` | `%{count: 1}` | `%{type: String.t(), middleware: String.t(), response: term(), envelope_id: String.t() | nil}` |
-| `[:slackbot, :ack, :http]` | `%{duration: native}` | `%{status: :ok | :error | :unknown | :exception}` |
-| `[:slackbot, :diagnostics, :record]` | `%{count: 1}` | `%{direction: :inbound | :outbound}` |
+| `[:slackbot, :rate_limiter, :drain]` | `%{drained: integer, delay_ms: integer \| nil}` | `%{key: term(), reason: term()}` |
+| `[:slackbot, :handler, :ingress]` | `%{count: 1}` | `%{decision: :queue \| :duplicate, type: String.t(), envelope_id: String.t() \| nil}` |
+| `[:slackbot, :handler, :dispatch, :start/:stop]` (span) | `%{system_time: native}` / `%{duration: native}` | `%{type: event_type, status: :ok \| :error \| :exception \| :halted, envelope_id: String.t() \| nil}` |
+| `[:slackbot, :handler, :middleware, :halt]` | `%{count: 1}` | `%{type: String.t(), middleware: String.t(), response: term(), envelope_id: String.t() \| nil}` |
+| `[:slackbot, :ack, :http]` | `%{duration: native}` | `%{status: :ok \| :error \| :unknown \| :exception}` |
+| `[:slackbot, :diagnostics, :record]` | `%{count: 1}` | `%{direction: :inbound \| :outbound}` |
 | `[:slackbot, :diagnostics, :replay]` | `%{count: integer}` | `%{filters: map()}` |
 
 All event names are prefixed with your configured `telemetry_prefix`
@@ -82,7 +80,7 @@ config :my_app, MyApp.SlackBot,
 
 When enabled, `SlackBot.TelemetryStats` attaches to your Telemetry prefix, rolls up counters (API
 throughput, handler statuses, rate/tier limiter queues, connection states, etc.), and periodically
-persists the snapshot via `SlackBot.Cache.put_metadata/2`. Because it goes through the cache
+persists the snapshot to the cache. Because it goes through the cache
 adapter, the stats work regardless of whether you are using the default ETS backend or a Redis
 adapter.
 
@@ -242,4 +240,13 @@ functions does not block the main Slack connection.
 - LiveDashboard can plot these metrics with a few lines of `Telemetry.Metrics`.
 - Diagnostics replays + Telemetry metrics offer a full picture when debugging Slack bots
   in production.
+
+---
+
+## Next Steps
+
+- [Getting Started](getting_started.md) — set up a Slack App and run your first handler
+- [Rate Limiting](rate_limiting.md) — understand how tier-aware limiting works
+- [Slash Grammar](slash_grammar.md) — build deterministic command parsers
+- [Diagnostics](diagnostics.md) — capture and replay events for debugging
 

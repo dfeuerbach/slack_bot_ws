@@ -89,7 +89,7 @@ Diagnostics actions emit Telemetry events (prefixed by `telemetry_prefix`):
 - `[:slackbot, :diagnostics, :record]` — measurements: `%{count: 1}`; metadata: `%{direction: :inbound}`
 - `[:slackbot, :diagnostics, :replay]` — metadata includes replay count and filter options.
 
-Combine them with the structured logging helpers (`SlackBot.Logging.with_envelope/3`)
+Combine them with the structured logging helpers
 to correlate payload metadata with your application logs. Example metric:
 
 ```elixir
@@ -107,4 +107,13 @@ Summary.new(
   environments.
 - Disable diagnostics in environments where sensitive data must not linger in memory.
 - Use `SlackBot.Diagnostics.clear/1` after you capture what you need.
+
+---
+
+## Next Steps
+
+- [Getting Started](getting_started.md) — set up a Slack App and run your first handler
+- [Rate Limiting](rate_limiting.md) — understand how SlackBot paces Web API calls
+- [Slash Grammar](slash_grammar.md) — build deterministic command parsers
+- [Telemetry Dashboard](telemetry_dashboard.md) — correlate diagnostics with metrics
 
