@@ -18,9 +18,21 @@ defmodule SlackBot.MixProject do
         source_url: "https://github.com/dfeuerbach/slack_bot_ws",
         extras: [
           "README.md",
+          "docs/getting_started.md",
+          "docs/rate_limiting.md",
           "docs/slash_grammar.md",
           "docs/diagnostics.md",
-          "docs/telemetry_dashboard.md"
+          "docs/telemetry_dashboard.md",
+          "CHANGELOG.md"
+        ],
+        groups_for_extras: [
+          Guides: [
+            "docs/getting_started.md",
+            "docs/rate_limiting.md",
+            "docs/slash_grammar.md",
+            "docs/diagnostics.md",
+            "docs/telemetry_dashboard.md"
+          ]
         ],
         assets: %{"docs/images" => "docs/images"}
       ]
@@ -50,7 +62,10 @@ defmodule SlackBot.MixProject do
   end
 
   defp description do
-    "Socket Mode toolkit for building resilient Slack automations in Elixir."
+    """
+    Production-ready Slack bot framework for Socket Mode. Tier-aware rate limiting, \
+    deterministic slash-command parsing, and full observability—out of the box.
+    """
   end
 
   defp package do
@@ -61,7 +76,7 @@ defmodule SlackBot.MixProject do
         "GitHub" => "https://github.com/dfeuerbach/slack_bot_ws",
         "Changelog" => "https://github.com/dfeuerbach/slack_bot_ws/blob/master/CHANGELOG.md"
       },
-      files: ~w(lib docs mix.exs README.md LICENSE CHANGELOG.md)
+      files: ~w(lib docs mix.exs README.md LICENSE CHANGELOG.md AGENTS.md)
     ]
   end
 
