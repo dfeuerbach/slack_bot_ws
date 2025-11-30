@@ -2,7 +2,7 @@
 
 ![SlackBot WS](docs/images/slack_bot_ws_logo.png)
 
-SlackBot is a performant, resiliant and easy-to-use Slack bot framework. You get fast and graceful slash-command handling, deterministic command parsing, and a supervised event pipeline that stays responsive under load. Slackbot automatically honors Slack's API Tier-aware rate limits, has built-in cache and metadata sync, replayable diagnostics to ease troubleshooting and full Telemetry coverage. Developers get a clean, composable slash command DSL, first-class interactivity routing, and a runtime designed for survivability and observability.
+SlackBot is a robust, easy-to-use Slack bot framework for Slack's Socket Mode. You get fast and graceful slash-command handling, deterministic command parsing, and a supervised event pipeline that stays responsive under load. Slackbot automatically honors Slack's API Tier-aware rate limits, has built-in cache and metadata sync, replayable diagnostics to ease troubleshooting and full Telemetry coverage. Developers get a clean, composable slash command DSL, first-class interactivity routing, and a runtime designed for survivability and observability.
 
 ## Highlights
 - Supervised WebSocket connection manager with rate-limit aware backoff, robust HTTP-based health monitoring, and default per-workspace/per-channel Web API rate limiting that follows Slack’s prescribed limits
@@ -59,6 +59,12 @@ defmodule MyApp.SlackBot do
 end
 ```
 
+**How this works**
+
+- `use SlackBot, otp_app: :my_app` turns the module into a router. At compile time it injects the DSL macros (`handle_event/3`, `slash/2`, etc.) and at runtime SlackBot will look up `MyApp.SlackBot`’s configuration under `:my_app`.
+- `handle_event/3` runs for every Slack event whose `"type"` matches the first argument (`"message"` here). The second argument is the raw payload map from Slack, and the third argument (`ctx`) is the per-event context (telemetry prefix, assigns, HTTP client, etc.). We mark it `_ctx` since this example does not need it.
+- `SlackBot.push/2` is the safe Web API helper. It automatically routes through the managed rate limiter, telemetry, retries, and Finch pool. Every handler has access to it without additional wiring.
+
 2. Configure your Slack tokens (for example in `config/config.exs`):
 
 ```elixir
@@ -66,6 +72,10 @@ config :my_app, MyApp.SlackBot,
   app_token: System.fetch_env!("SLACK_APP_TOKEN"),
   bot_token: System.fetch_env!("SLACK_BOT_TOKEN")
 ```
+
+This wires tokens into `SlackBot.Config`. At runtime SlackBot merges these application env values
+with any runtime overrides passed to `SlackBot.start_link/1`, validates them, and stores the result
+in the config server so handlers can access immutable settings without re-reading env vars.
 
 3. Supervise your bot alongside your application processes:
 
@@ -76,6 +86,10 @@ children = [
 
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
+
+Because the bot module `use`d the OTP integration (`otp_app: :my_app`), each child spec is as simple
+as `MyApp.SlackBot`. Under the hood SlackBot supervises Socket Mode transport + cache + rate limiter
+processes and resolves the correct configuration by matching the module name.
 
 With just those three pieces (module, config, supervision), SlackBot boots a Socket Mode connection
 with sensible defaults for backoff, heartbeats, ETS-backed cache + event buffer, per-workspace/per-channel
@@ -89,13 +103,13 @@ section, you still get a production-ready baseline. When you are ready to tune b
 override any of the following keys under your bot module’s config:
 
 - **Connection & backoff**
-  - **`backoff`**: `min_ms`, `max_ms`, `max_attempts`, `jitter_ratio` (controls reconnect timing).
-  - **`log_level`**: log verbosity for the connection manager and helpers.
-  - **`health_check`**: HTTP-based health pings (`auth.test`) that monitor Slack/Web API reachability and nudge the connection manager to reconnect on repeated network failures.
+  - **`backoff`**: `min_ms`, `max_ms`, `max_attempts`, `jitter_ratio` (controls reconnect timing). Defaults to `min_ms: 1_000`, `max_ms: 30_000`, `max_attempts: :infinity`, `jitter_ratio: 0.2`.
+  - **`log_level`**: log verbosity for the connection manager and helpers (defaults to `:info`).
+  - **`health_check`**: HTTP-based health pings (`auth.test`) that monitor Slack/Web API reachability and nudge the connection manager to reconnect on repeated network failures. Enabled by default with `interval_ms: 30_000`.
 
 - **Telemetry**
   - **`telemetry_prefix`**: prefix for all Telemetry events (defaults to `[:slackbot]`).
-  - **`telemetry_stats`**: `[enabled: true, flush_interval_ms: 15_000, ttl_ms: 300_000]` turns on the
+  - **`telemetry_stats`**: Disabled by default. Setting `[enabled: true, flush_interval_ms: 15_000, ttl_ms: 300_000]` turns on the
     cache-backed `SlackBot.TelemetryStats` process. It attaches to the bot’s Telemetry prefix,
     keeps running counters for API calls, handlers, rate/tier limiters, etc., and periodically
     persists a snapshot via the configured cache adapter (ETS, Redis, etc.). Consumers can read
@@ -104,7 +118,7 @@ override any of the following keys under your bot module’s config:
     LiveDashboard wiring.
 
 - **Cache & event buffer**
-  - **`cache`**: choose ETS or a custom adapter:
+  - **`cache`**: ETS-backed provider/mutation queues are used by default (`{:ets, []}`). Override only when you need async writes or a custom adapter:
 
     ```elixir
     cache: {:ets, []}
@@ -112,7 +126,7 @@ override any of the following keys under your bot module’s config:
     cache: {:adapter, MyApp.CacheAdapter, []}
     ```
 
-  - **`event_buffer`**: choose ETS or a custom adapter (Redis adapter included):
+  - **`event_buffer`**: Also defaults to ETS (`{:ets, []}`) for in-node dedupe. Switch to a custom adapter (Redis included) when you need cross-node coordination:
 
     ```elixir
     event_buffer: {:ets, []}
@@ -147,8 +161,8 @@ override any of the following keys under your bot module’s config:
 
     Slack’s per-method **tier quotas** are also enforced automatically (for example
     `users.list` and `users.conversations` share Tier 2’s “20 per minute” budget so cache
-    syncs queue instead of hammering Slack).
-    You can override or extend the tier table by configuring `SlackBot.TierRegistry`:
+    syncs queue instead of hammering Slack). You can override or extend the tier table via the
+    tier registry configuration:
 
     ```elixir
     config :slack_bot_ws, SlackBot.TierRegistry,
@@ -172,7 +186,7 @@ override any of the following keys under your bot module’s config:
     `:bot_user_id` to help the cache track channel membership for the bot user.
 
 - **Diagnostics**
-  - **`diagnostics`**: enable the ring buffer and set its size:
+  - **`diagnostics`**: Off by default. Enable the ring buffer and set its size:
 
     ```elixir
     diagnostics: [enabled: true, buffer_size: 300]
@@ -181,10 +195,12 @@ override any of the following keys under your bot module’s config:
     See `SlackBot.Diagnostics` and `docs/diagnostics.md` for how to list, clear, and replay entries.
 
 - **Metadata cache & background sync**
-  - **`cache_sync`**: periodically populate the cache with users and channels using Slack Web API:
+  - **`cache_sync`**: Refresh cached Slack metadata on a schedule.
+
+    **Defaults:** enabled with `kinds: [:channels]`, so the sync refreshes the channels the bot already belongs to. User sync is opt-in (`kinds: [:users, :channels]` or `[:users]`) and uses the same scheduler.
 
     ```elixir
-    # defaults (enabled with both users and channels)
+    # defaults (channels only)
     config :my_app, MyApp.SlackBot,
       app_token: System.fetch_env!("SLACK_APP_TOKEN"),
       bot_token: System.fetch_env!("SLACK_BOT_TOKEN"),
@@ -206,9 +222,10 @@ override any of the following keys under your bot module’s config:
       ]
     ```
 
-    When enabled (the default), the sync keeps Slack membership and profile data fresh in the cache.
-    Channels are refreshed via `users.conversations`, and user entries expire based on the
-    `:user_cache` TTL (one hour by default) with a janitor process that clears stale records.
+    When channel sync is enabled (the default), SlackBot lists channels via `users.conversations`
+    and keeps the cache aligned with the bot’s memberships. The `%SlackBot.Config{user_cache: ...}`
+    settings control how long fetched user profiles stick around (one hour TTL by default, with a
+    janitor process that clears stale records) once you opt into user sync.
 
     Your bot helpers (for example `MyApp.find_channel/1`, `MyApp.find_user/1`, and their plural
     counterparts) always read from that cache first. If an entry is missing or expired, the helper
@@ -223,13 +240,11 @@ override any of the following keys under your bot module’s config:
         cleanup_interval_ms: :timer.minutes(5)
       ]
     ```
-    Set `assigns: %{bot_user_id: "U123"}` in your bot configuration for zero-cost channel
-    syncs, or let SlackBot call `auth.test` on-demand to discover the bot identity before
-    issuing `users.conversations`. Use `users_conversations_opts` to pass Slack parameters
+    Use `users_conversations_opts` to pass Slack parameters
     like `types`, `limit`, or `exclude_archived` when you need to narrow the sync.
 
 - **Web API pooling**
-  - **`api_pool_opts`**: forwarded to Finch for Web API requests:
+  - **`api_pool_opts`**: Optional overrides forwarded to Finch for Web API requests (SlackBot uses Finch’s defaults when this key is omitted):
 
     ```elixir
     api_pool_opts: [
@@ -289,6 +304,12 @@ defmodule LayeredRouter do
 end
 ```
 
+**What’s happening above**
+
+1. The `middleware` calls register Logger/blocklist modules whose `call/3` functions run before every handler. Each receives `{type, payload, ctx}` and must return `{:cont, payload, ctx}` to continue or `{:halt, response}` to short-circuit.
+2. `ctx.assigns` is the per-request map you configure via `assigns:`. It carries things like `blocked_users` and `tenant_id` so middleware and handlers can share state without globals.
+3. Both `handle_event "message", ...` clauses fire for every message envelope, in the order they appear. That keeps caching and replying isolated while sharing the same event stream.
+
 In this example the cache update and reply logic stay isolated, yet both run for each message.
 Because middleware runs before every handler, the block list can short-circuit the pipeline
 (`{:halt, ...}`) and stop every remaining handler. Slash commands keep their single match
@@ -326,7 +347,7 @@ config :slack_bot_ws, SlackBot,
      redis: [host: "127.0.0.1", port: 6379], namespace: "slackbot"}
 ```
 
-- `SlackBot.Cache.Adapters.ETS` keeps the original provider/mutation queue semantics for single-node deployments. Supply `cache: {:ets, [mode: :async]}` if you prefer fire-and-forget writes that never block the socket.
+- The built-in ETS cache adapter keeps the original provider/mutation queue semantics for single-node deployments. Supply `cache: {:ets, [mode: :async]}` if you prefer fire-and-forget writes that never block the socket.
 - `SlackBot.EventBuffer.Adapters.Redis` ships with the toolkit and uses `Redix` under the hood; pass your own options or wrap the behaviour to integrate alternative datastores.
 - Implement `SlackBot.Cache.Adapter` / `SlackBot.EventBuffer.Adapter` to plug in any backend—tests demonstrate lightweight adapters for reference.
 
@@ -432,4 +453,4 @@ Use the feature tracker to determine which tests or sample apps should run for a
 
 ## License
 
-MIT. See [LICENSE](LICENSE) for details. Copyright 2025, Douglas Feuerbach.
+MIT. See [LICENSE](https://github.com/dfeuerbach/slack_bot_ws/blob/master/LICENSE) for details. Copyright 2025, Douglas Feuerbach.

@@ -29,7 +29,7 @@ When enabled, SlackBot records:
 
 - **Inbound frames** after dedupe: event type, payload, and envelope metadata.
 - **Synthetic events** triggered via `SlackBot.emit/2`.
-- **Outgoing frames** emitted through `SlackBot.Socket` (handy for debugging ack flows).
+- **Outgoing frames** emitted through the socket transport (handy for debugging ack flows).
 
 Every entry includes timestamp, direction, type, and payload snapshot.
 

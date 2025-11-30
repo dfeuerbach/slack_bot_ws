@@ -36,22 +36,22 @@ All event names are prefixed with your configured `telemetry_prefix`
 
 ### Rate limiter vs tier limiter
 
-- **Rate limiter (`SlackBot.RateLimiter`)** shapes individual Web API calls. It keeps a per-channel
-  bucket for high-volume chat methods and a workspace bucket for everything else. A `:decision`
-  event exposes the current `queue_length` (pending requests) and `in_flight` count (requests that
-  already passed the gate). When Slack replies with `429 Retry-After`, the ETS adapter stores a
-  monotonic `blocked_until`, which surfaces as `[:rate_limiter, :blocked]` (with `delay_ms`) and,
-  once the timer drains the queue, `[:rate_limiter, :drain]` with the number of releases and the
-  same delay. Track these to understand whether you are pushing against channel-specific chat
-  limits (queue spikes) or Slack-imposed cooling-off periods (blocked/drain events).
+- **Rate limiter** shapes individual Web API calls. It keeps a per-channel bucket for high-volume
+  chat methods and a workspace bucket for everything else. A `:decision` event exposes the current
+  `queue_length` (pending requests) and `in_flight` count (requests that already passed the gate).
+  When Slack replies with `429 Retry-After`, the ETS-backed adapter stores a monotonic
+  `blocked_until`, which surfaces as `[:rate_limiter, :blocked]` (with `delay_ms`) and, once the
+  timer drains the queue, `[:rate_limiter, :drain]` with the number of releases plus the same delay.
+  Track these to understand whether you are pushing against channel-specific chat limits (queue
+  spikes) or Slack-imposed cooling-off periods (blocked/drain events).
 
-- **Tier limiter (`SlackBot.TierLimiter`)** enforces Slack's published per-method quotas (the
-  “Tier 1–4” buckets). Each method (or group) gets a fractional token bucket. `queue_length`
-  indicates how many callers are waiting for the window to refill, while `tokens` is the precise
-  number of quota tokens remaining (it is a float because Slack quotas are averaged over time).
-  When Slack returns `Retry-After` for a tiered method, `SlackBot` calls `TierLimiter.suspend/4`,
-  which emits a `:suspend` event with the delay and a corresponding `:resume` when tokens become
-  available again. Use the suspend/resume telemetry to answer “which scope is starved right now?”
+- **Tier limiter** enforces Slack's published per-method quotas (the "Tier 1-4" buckets). Each method
+  (or group) gets a fractional token bucket. `queue_length` indicates how many callers are waiting
+  for the window to refill, while `tokens` is the precise number of quota tokens remaining (it is a
+  float because Slack quotas are averaged over time). When Slack returns `Retry-After` for a tiered
+  method, the limiter suspends that bucket, emits a `:suspend` event with the delay, and later
+  emits a corresponding `:resume` when tokens become available again. Use the suspend/resume
+  telemetry to answer “which scope is starved right now?”
 
 ### Handler pipeline anatomy
 
@@ -207,16 +207,17 @@ events (StatsD exporters, OpenTelemetry bridges, etc.) will work out of the box.
 
 ## Sample Snapshot (`/demo telemetry`)
 
-The sample router in `examples/basic_bot/` includes a `/demo telemetry` command that uses
-`BasicBot.TelemetryProbe` to subscribe to the events above, roll them up in-memory, and render
-the snapshot as a Block Kit card (cache health, API throughput, limiter queues, connection state,
-and healthcheck status). It’s a practical example of how to consume Telemetry without Phoenix:
+The sample router in `examples/basic_bot/` includes a `/demo telemetry` command that ships with a
+small telemetry probe module. The probe subscribes to the events above, rolls them up in-memory,
+and renders the snapshot as a Block Kit card (cache health, API throughput, limiter queues,
+connection state, and healthcheck status). It's a practical example of how to consume Telemetry
+without Phoenix:
 
-1. `BasicBot.TelemetryProbe` calls `:telemetry.attach_many/4` for the SlackBot prefix.
+1. The probe calls `:telemetry.attach_many/4` for the SlackBot prefix.
 2. It keeps lightweight counters/last-seen metadata in a GenServer.
 3. The slash command pulls a snapshot and formats it for Slack.
 
-Feel free to lift that module into your own bots if you want a prebuilt telemetry “dashboard”
+Feel free to lift that helper into your own bots if you want a prebuilt telemetry "dashboard"
 inside Slack itself.
 
 ## Exposing Diagnostics in LiveDashboard
