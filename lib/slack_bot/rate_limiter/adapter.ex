@@ -1,13 +1,5 @@
 defmodule SlackBot.RateLimiter.Adapter do
-  @moduledoc """
-  Behaviour for rate limiter backends.
-
-  Implementations are responsible for tracking per-key blocking windows
-  (for example, derived from Slack `429` responses and `Retry-After`
-  hints). SlackBot's managed rate-limiter process owns queuing and
-  in-flight coordination; adapters focus on persisting and querying
-  block state.
-  """
+  @moduledoc false
 
   alias SlackBot.Config
 

@@ -1,10 +1,5 @@
 defmodule SlackBot.SlashAck.HttpClient do
-  @moduledoc """
-  Behaviour for slash command acknowledgement HTTP clients.
-
-  Provide a custom implementation via `%SlackBot.Config{ack_client: MyClient}` when you
-  need to control how response URLs are invoked during auto-ack flows.
-  """
+  @moduledoc false
 
   @callback post(String.t(), map(), SlackBot.Config.t()) :: :ok | {:error, term()}
 end

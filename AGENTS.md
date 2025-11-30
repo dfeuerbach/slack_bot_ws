@@ -133,7 +133,6 @@ non-obvious rules so that automated changes remain idiomatic and safe.
 
 - Default `ack_mode` is `:silent`, so commands only post their final response. Opt into `:ephemeral` in config or per-command assigns when the maintainer wants the “Processing…” placeholder.
 - Custom ack callbacks must be idempotent and fast; they receive the parsed command map plus the immutable `%SlackBot.Config{}`. Never perform blocking I/O inside the callback—delegate to a Task if needed.
-- `ack_client` defaults to `SlackBot.SlashAck.HTTP`. Override it only when tests provide a fake HTTP client or when the project introduces a custom transport.
 
 ## Testing helpers
 
