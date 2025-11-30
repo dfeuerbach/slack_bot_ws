@@ -18,9 +18,7 @@ defmodule SlackBot.Cache do
           | {:drop_user, String.t()}
           | {:put_metadata, map()}
 
-  @doc """
-  Returns the supervision children required to run the configured cache adapter.
-  """
+  @doc false
   @spec child_specs(SlackBot.Config.t()) :: [Supervisor.child_spec()]
   def child_specs(%SlackBot.Config{} = config) do
     {adapter, opts} = adapter_from_config(config)
@@ -28,52 +26,40 @@ defmodule SlackBot.Cache do
     adapter.child_specs(config, opts)
   end
 
-  @doc """
-  Lists the channel IDs currently cached for the bot instance.
-  """
+  @doc false
   @spec channels(SlackBot.Config.t() | GenServer.server()) :: [String.t()]
   def channels(config_or_name) do
     {config, adapter, opts} = resolve(config_or_name)
     adapter.channels(config, opts)
   end
 
-  @doc """
-  Returns a map of user_id => user_payload for cached users.
-  """
+  @doc false
   @spec users(SlackBot.Config.t() | GenServer.server()) :: map()
   def users(config_or_name) do
     {config, adapter, opts} = resolve(config_or_name)
     adapter.users(config, opts)
   end
 
-  @doc """
-  Returns the cached metadata map merged via `put_metadata/2`.
-  """
+  @doc false
   @spec metadata(SlackBot.Config.t() | GenServer.server()) :: map()
   def metadata(config_or_name) do
     {config, adapter, opts} = resolve(config_or_name)
     adapter.metadata(config, opts)
   end
 
-  @doc """
-  Marks the bot as having joined the given `channel`.
-  """
+  @doc false
   @spec join_channel(SlackBot.Config.t(), String.t()) :: :ok
   def join_channel(config, channel) do
     mutate(config, {:join_channel, channel})
   end
 
-  @doc """
-  Marks the bot as having left the given `channel`.
-  """
+  @doc false
   @spec leave_channel(SlackBot.Config.t(), String.t()) :: :ok
   def leave_channel(config, channel) do
     mutate(config, {:leave_channel, channel})
   end
 
-  @doc """
-  Stores or updates a Slack user payload.
-  """
+  @doc false
   @spec put_user(SlackBot.Config.t(), map()) :: :ok
   def put_user(config, user) do
     ttl_ms = user_cache_opts(config).ttl_ms
@@ -81,11 +67,7 @@ defmodule SlackBot.Cache do
     mutate(config, {:put_user, user, expires_at})
   end
 
-  @doc """
-  Merges arbitrary metadata (team info, workspace settings, etc.) into the cache.
-
-  Use `metadata/1` to read the merged map back.
-  """
+  @doc false
   @spec put_metadata(SlackBot.Config.t(), map()) :: :ok
   def put_metadata(config, metadata) when is_map(metadata) do
     mutate(config, {:put_metadata, metadata})

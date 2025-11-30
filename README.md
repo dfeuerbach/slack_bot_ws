@@ -333,8 +333,6 @@ children = [
 Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
-Use `SlackBot.Cache.channels/1`, `SlackBot.Cache.users/1`, and `SlackBot.Cache.metadata/1` to inspect cached state maintained by the runtime provider/mutation queue pair.
-
 ## Adapters & Multi-node Deployments
 
 Both the cache and event buffer accept custom adapters so you can share state across BEAM nodes or move metadata into Redis:
