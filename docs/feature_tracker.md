@@ -106,8 +106,8 @@ Polish user-facing documentation, sample bots, and perform end-to-end verificati
 - [x] Author README usage guide + quick-start sample (highlighting BlockBox helpers, diagnostics replay, auto-ack stories).
 - [x] Provide LiveDashboard/Telemetry integration guide (document telemetry events, dashboard wiring).
 - [x] Build sample bot in `examples/` demonstrating middleware, slash DSL, diagnostics replay.
-- [ ] Run full QA sweep: `mix test`, `mix format --check-formatted`, `mix credo`, `mix dialyzer` (if configured) and capture results.
-- [ ] Audit documentation coverage before publishing HexDocs (README, guides, module `@doc`s, extras).
+- [x] Run full QA sweep: `mix test`, `mix format --check-formatted`, `mix credo`, `mix dialyzer` (if configured) and capture results.
+- [x] Audit documentation coverage before publishing HexDocs (README, guides, module `@doc`s, extras).
 
 ### Testing
 - `mix test`
