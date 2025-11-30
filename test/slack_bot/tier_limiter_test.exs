@@ -149,8 +149,7 @@ defmodule SlackBot.TierLimiterTest do
     assert :ok = TierLimiter.acquire(config, "users.list", %{})
 
     assert_receive {:telemetry, [:slackbot, :tier_limiter, :decision],
-                    %{tokens: tokens, queue_length: 0},
-                    %{method: "users.list", decision: :allow}}
+                    %{tokens: tokens, queue_length: 0}, %{method: "users.list", decision: :allow}}
 
     assert is_number(tokens)
 
@@ -172,7 +171,8 @@ defmodule SlackBot.TierLimiterTest do
 
     assert_receive {:telemetry, [:slackbot, :tier_limiter, :resume],
                     %{tokens: _resume_tokens, queue_length: _},
-                    %{method: "users.list", scope_key: resume_scope_key}}, 200
+                    %{method: "users.list", scope_key: resume_scope_key}},
+                   200
 
     assert resume_scope_key == config.instance_name
 

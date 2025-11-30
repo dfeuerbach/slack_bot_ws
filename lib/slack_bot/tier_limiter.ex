@@ -256,6 +256,7 @@ defmodule SlackBot.TierLimiter do
       bucket.tokens >= 1 ->
         {{:value, {from, method}}, queue} = :queue.out(bucket.queue)
         bucket = %{bucket | queue: queue} |> spend_token()
+
         emit_decision(
           config,
           method,
@@ -264,6 +265,7 @@ defmodule SlackBot.TierLimiter do
           :queue.len(bucket.queue),
           bucket.tokens
         )
+
         do_allow_waiters(bucket, config, [from | replies])
 
       true ->
@@ -285,6 +287,7 @@ defmodule SlackBot.TierLimiter do
     |> :erlang.float()
     |> Float.round(4)
   end
+
   defp normalize_tokens(_), do: 0.0
 
   defp put_bucket(state, key, bucket) do
@@ -334,6 +337,7 @@ defmodule SlackBot.TierLimiter do
 
   defp suspend_bucket(bucket, now, delay_ms, method) do
     resume_at = now + delay_ms
+
     %{
       bucket
       | tokens: 0.0,
