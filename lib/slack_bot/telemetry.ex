@@ -1,10 +1,5 @@
 defmodule SlackBot.Telemetry do
-  @moduledoc """
-  Helper utilities for emitting Telemetry events with the configured prefix.
-
-  Every SlackBot instance can customize `:telemetry_prefix` in its config; this module
-  ensures all internal instrumentation respects that prefix.
-  """
+  @moduledoc false
 
   @doc """
   Executes a Telemetry event by appending `suffix` to the instance prefix.

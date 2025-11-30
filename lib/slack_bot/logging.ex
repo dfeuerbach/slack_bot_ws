@@ -1,10 +1,5 @@
 defmodule SlackBot.Logging do
-  @moduledoc """
-  Structured logging helpers for SlackBot.
-
-  Use `with_envelope/3` to temporarily attach metadata (envelope id, event type, channel,
-  user) while executing code that emits `Logger` messages.
-  """
+  @moduledoc false
 
   require Logger
 
