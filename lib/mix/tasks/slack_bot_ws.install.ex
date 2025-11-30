@@ -60,8 +60,14 @@ defmodule Mix.Tasks.SlackBotWs.Install do
 
         Next steps:
 
-          * Set SLACK_APP_TOKEN and SLACK_BOT_TOKEN in your environment.
-          * Restart your application.
+          1. Set SLACK_APP_TOKEN and SLACK_BOT_TOKEN in your environment.
+          2. Start your application with `iex -S mix`.
+          3. Invite your bot to a channel and @mention it.
+
+        Guides:
+          - Getting Started: https://hexdocs.pm/slack_bot_ws/getting_started.html
+          - Slash Grammar:   https://hexdocs.pm/slack_bot_ws/slash_grammar.html
+          - Diagnostics:     https://hexdocs.pm/slack_bot_ws/diagnostics.html
         """)
 
       {:error, reason} ->
@@ -75,19 +81,29 @@ defmodule Mix.Tasks.SlackBotWs.Install do
 
     To wire SlackBot manually:
 
-      1. Add a bot module (for example at lib/#{app}/slack_bot.ex):
+      1. Create a bot module at lib/#{app}/slack_bot.ex:
 
            defmodule #{inspect(bot_module)} do
              use SlackBot, otp_app: :#{app}
+
+             handle_event "app_mention", event, _ctx do
+               SlackBot.push({"chat.postMessage", %{
+                 "channel" => event["channel"],
+                 "text" => "Hi <@\#{event["user"]}>!"
+               }})
+             end
            end
 
-      2. Add config under config/config.exs:
+      2. Add config in config/config.exs:
 
            config :#{app}, #{inspect(bot_module)},
              app_token: System.fetch_env!("SLACK_APP_TOKEN"),
              bot_token: System.fetch_env!("SLACK_BOT_TOKEN")
 
       3. Add #{inspect(bot_module)} to your application supervisor's children list.
+
+    For a complete walkthrough, see the Getting Started guide:
+    https://hexdocs.pm/slack_bot_ws/getting_started.html
     """)
   end
 
