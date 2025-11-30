@@ -4,8 +4,9 @@ defmodule SlackBot.RateLimiter.Adapter do
 
   Implementations are responsible for tracking per-key blocking windows
   (for example, derived from Slack `429` responses and `Retry-After`
-  hints). The `SlackBot.RateLimiter` process owns queuing and in-flight
-  coordination; adapters focus on persisting and querying block state.
+  hints). SlackBot's managed rate-limiter process owns queuing and
+  in-flight coordination; adapters focus on persisting and querying
+  block state.
   """
 
   alias SlackBot.Config

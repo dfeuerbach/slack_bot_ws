@@ -4,7 +4,7 @@ defmodule SlackBot.Router do
 
   By `use`-ing `SlackBot` (which delegates to this module), a bot gains macros to
   register event handlers, slash-command handlers, and middleware callbacks. At runtime,
-  the `SlackBot.ConnectionManager` consults those definitions to dispatch incoming Socket
+  the connection manager process consults those definitions to dispatch incoming Socket
   Mode events.
 
   ## Example

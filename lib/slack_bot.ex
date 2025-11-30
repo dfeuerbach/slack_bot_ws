@@ -41,7 +41,7 @@ defmodule SlackBot do
   @doc """
   Starts a SlackBot supervision tree.
 
-  Accepts the same options as `c:child_spec/1`, returning `Supervisor.on_start/2`.
+  Accepts the same options as `child_spec/1`, returning `Supervisor.on_start()`.
   """
   @spec start_link(keyword()) :: Supervisor.on_start()
   def start_link(opts \\ []) when is_list(opts) do
