@@ -1,0 +1,11 @@
+[
+  verbose: false,
+  private: false,
+  skip: false,
+  exit: "high",
+  ignore: [
+    "Config.HTTPS",           # Library, not deployed app
+    "RCE.CodeModule",         # Compile-time macro evaluation (safe)
+    "Misc.BinToTerm"          # Internal Redis serialization (safe)
+  ]
+]

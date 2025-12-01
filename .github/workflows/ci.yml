@@ -94,6 +94,12 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
+      - name: Audit dependencies for vulnerabilities
+        run: mix hex.audit
+
+      - name: Security scan with Sobelow
+        run: mix sobelow --config
+
       - name: Generate docs (verify no warnings)
         run: mix docs
 

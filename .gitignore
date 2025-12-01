@@ -32,3 +32,6 @@ slack_bot_ws-*.tar
 ref
 
 .cursor
+
+# Sobelow update tracking
+.sobelow
