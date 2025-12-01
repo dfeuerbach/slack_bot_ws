@@ -2,8 +2,62 @@ defmodule SlackBot.Command do
   @moduledoc """
   Tokenization helpers for slash commands.
 
-  The module normalizes whitespace, respects quoted strings, and exposes the lexer used by
-  the grammar DSL so each command receives reliable tokens before grammar matching.
+  This module provides the lexer that powers SlackBot's slash command grammar DSL.
+  It normalizes whitespace, respects quoted strings, and produces consistent tokens
+  that the grammar matcher consumes.
+
+  ## When to Use This Module
+
+  **You typically don't need to call these functions directly.** The `slash/2` macro
+  handles tokenization automatically. However, this module is useful when:
+
+  - Testing your slash grammar patterns
+  - Building custom command parsers outside the DSL
+  - Debugging tokenization issues
+
+  ## Tokenization Behavior
+
+  The lexer handles:
+
+  - **Whitespace normalization** - Multiple spaces collapse to single separators
+  - **Quoted strings** - `"multiple words"` become a single token
+  - **Command extraction** - Leading `/command` is separated from arguments
+
+  ## Examples
+
+      iex> SlackBot.Command.lex("/deploy api production")
+      %{command: "deploy", tokens: ["api", "production"]}
+
+      iex> SlackBot.Command.lex("/list \\"John Smith\\" --active")
+      %{command: "list", tokens: ["John Smith", "--active"]}
+
+      iex> SlackBot.Command.lex("    extra    spaces    ")
+      %{command: nil, tokens: ["extra", "spaces"]}
+
+  ## Grammar DSL
+
+  The slash grammar DSL uses these tokens under the hood:
+
+      slash "/deploy" do
+        grammar do
+          value :service        # Matches one token
+          literal "canary"      # Matches the literal word "canary"
+          repeat do
+            literal "env"
+            value :environments
+          end
+        end
+
+        handle payload, _ctx do
+          # payload["parsed"] contains the matched values
+        end
+      end
+
+  ## See Also
+
+  - [Slash Grammar Guide](https://hexdocs.pm/slack_bot_ws/slash_grammar.html)
+  - The `slash/2` macro for defining command grammars
+  - `BasicBot` - Example demonstrating complex grammar patterns
   """
 
   import NimbleParsec

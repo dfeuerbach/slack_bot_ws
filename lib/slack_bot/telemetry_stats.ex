@@ -1,12 +1,76 @@
 defmodule SlackBot.TelemetryStats do
   @moduledoc """
-  Optional Telemetry aggregator that rolls SlackBot signals into a cache-backed snapshot.
+  Optional Telemetry aggregator that rolls SlackBot events into cache-backed metrics.
 
-  When enabled via `%SlackBot.Config{telemetry_stats: [enabled: true, ...]}`, the process
-  attaches to SlackBot's Telemetry prefix, maintains running counters, and periodically
-  persists the snapshot through the configured cache adapter. Consumers can call
-  `snapshot/1` to read the latest cached payload regardless of the backing store
-  (ETS, Redis, etc.).
+  This module attaches to SlackBot's Telemetry stream, aggregates events into running
+  counters, and periodically persists snapshots to the cache. It provides production
+  observability without external dependencies—just enable it in config and query via
+  `snapshot/1`.
+
+  ## Why Use TelemetryStats?
+
+  - **Production debugging** - Quickly see API call rates, handler outcomes, and limiter activity
+  - **Health monitoring** - Track connection states and health check results
+  - **Performance analysis** - Measure average API latency and handler execution time
+  - **Multi-node visibility** - When using Redis cache, stats are visible across nodes
+
+  ## Configuration
+
+  Enable in your bot config:
+
+      config :my_app, MyApp.SlackBot,
+        telemetry_stats: [
+          enabled: true,
+          flush_interval_ms: 15_000,  # How often to persist to cache
+          ttl_ms: 300_000              # How long to keep stale snapshots
+        ]
+
+  ## Usage
+
+  Query the latest snapshot:
+
+      iex> SlackBot.TelemetryStats.snapshot(MyApp.SlackBot)
+      %{
+        stats: %{
+          api: %{total: 42, ok: 40, error: 2, avg_duration_ms: 150.5, ...},
+          handler: %{status: %{ok: 15, error: 1}, duration_ms: 1200, ...},
+          cache: %{users: 100, channels: 25},
+          connection: %{states: %{connected: 5, disconnected: 1}},
+          rate_limiter: %{allow: 40, queue: 2, drains: 12},
+          tier: %{allow: 38, queue: 0, suspensions: 0}
+        },
+        generated_at_ms: 1733097600000
+      }
+
+  ## In Production
+
+  Send snapshots to monitoring dashboards, log aggregators, or Slack itself:
+
+      def periodic_report(channel_id) do
+        snapshot = SlackBot.TelemetryStats.snapshot(MyBot)
+        metrics = format_metrics(snapshot)
+
+        SlackBot.push(MyBot, {"chat.postMessage", %{
+          channel: channel_id,
+          text: "Bot health report",
+          blocks: metrics
+        }})
+      end
+
+  ## Without TelemetryStats
+
+  If you don't enable TelemetryStats, you can still:
+
+  - Attach custom `:telemetry` handlers directly to SlackBot events
+  - Use `SlackBot.Diagnostics` for payload-level debugging
+  - Integrate with LiveDashboard via the telemetry events documented in the
+    [Telemetry Guide](https://hexdocs.pm/slack_bot_ws/telemetry_dashboard.html)
+
+  ## See Also
+
+  - [Telemetry Guide](https://hexdocs.pm/slack_bot_ws/telemetry_dashboard.html)
+  - `SlackBot.Diagnostics` - For payload capture and replay
+  - `BasicBot` - Example using telemetry snapshots in slash commands
   """
 
   use GenServer

@@ -1,11 +1,78 @@
 defmodule SlackBot.Blocks do
   @moduledoc """
-  Helpers for composing Slack Block Kit payloads with optional BlockBox integration.
+  Helpers for composing Slack Block Kit payloads with optional [BlockBox](https://hex.pm/packages/blockbox) integration.
 
-  Configure `%SlackBot.Config{block_builder: {:blockbox, opts}}` to enable the BlockBox
-  DSL (if the dependency is available). When BlockBox is not present—or when you leave
-  the option as `:none`—the fallback helpers in this module produce idiomatic Block Kit
-  maps.
+  Block Kit is Slack's framework for building rich, interactive messages with buttons,
+  select menus, modals, and more. This module provides two ways to build Block Kit payloads:
+
+  1. **With BlockBox** (recommended) - A clean DSL when you add BlockBox as a dependency
+  2. **Manual helpers** - Lightweight functions that return Block Kit maps directly
+
+  ## Configuration
+
+  To enable BlockBox integration, add it to your `mix.exs`:
+
+      def deps do
+        [
+          {:slack_bot_ws, "~> 0.1.0"},
+          {:blockbox, "~> 1.2"}
+        ]
+      end
+
+  Then configure your bot:
+
+      config :my_app, MyApp.SlackBot,
+        block_builder: {:blockbox, []}
+
+  ## Usage with BlockBox
+
+  When BlockBox is configured, `build/2` delegates to the BlockBox DSL:
+
+      blocks = SlackBot.Blocks.build(MyApp.SlackBot, fn ->
+        [
+          SlackBot.Blocks.section("*Welcome!* Try these actions:"),
+          SlackBot.Blocks.divider(),
+          SlackBot.Blocks.section("Documentation",
+            accessory: SlackBot.Blocks.button("Read docs", url: "https://hexdocs.pm/slack_bot_ws")
+          )
+        ]
+      end)
+
+      SlackBot.push(MyApp.SlackBot, {"chat.postMessage", %{
+        channel: channel_id,
+        text: "Welcome message",
+        blocks: blocks
+      }})
+
+  ## Usage without BlockBox
+
+  Without BlockBox, `build/2` simply executes your function, so you call the helpers directly:
+
+      blocks =
+        SlackBot.Blocks.build(MyApp.SlackBot, fn ->
+          [
+            SlackBot.Blocks.section("*Welcome!*"),
+            SlackBot.Blocks.divider(),
+            SlackBot.Blocks.context(["Built with SlackBot"])
+          ]
+        end)
+
+  ## Available Helpers
+
+  This module provides helpers for common Block Kit elements:
+
+  - `section/2` - Text section with optional accessory (button, image, etc.)
+  - `divider/0` - Visual separator
+  - `context/1` - Small text or images for secondary information
+  - `button/2` - Interactive button element
+  - `markdown/1` - Markdown text object
+  - `plain_text/1` - Plain text object
+
+  ## See Also
+
+  - [Block Kit documentation](https://api.slack.com/block-kit) - Official Slack guide
+  - [BlockBox on Hex](https://hex.pm/packages/blockbox) - Elixir Block Kit DSL
+  - `BasicBot` - Example bot using Block Kit with these helpers
   """
 
   require Logger

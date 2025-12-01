@@ -1,14 +1,98 @@
 defmodule SlackBot.Diagnostics do
   @moduledoc """
-  Diagnostics buffer and replay helpers.
+  Ring buffer for capturing and replaying Slack events.
 
-  Configure via `%SlackBot.Config{diagnostics: [enabled: true, buffer_size: 200]}`.
-  When enabled, SlackBot records inbound/outbound frames so you can inspect or replay
-  recent traffic from an IEx session.
+  The diagnostics system records inbound and outbound Slack frames into a configurable
+  ring buffer, allowing you to inspect recent traffic and replay events through your
+  handlers—invaluable for reproducing production bugs locally.
 
-  > **Security note:** diagnostics entries contain the raw Slack payloads. Enable the buffer
-  > only in environments where retaining that data is acceptable, and remember to clear or
-  > scrub the buffer when working with sensitive workspaces.
+  ## Why Use Diagnostics?
+
+  - **Debug production issues** - Capture real payloads without external logging
+  - **Reproduce bugs locally** - Replay production events in development
+  - **Understand event structure** - Inspect Slack's payload format for new event types
+  - **Test handler changes** - Replay captured events after code modifications
+
+  ## Configuration
+
+  Enable the diagnostics buffer in your bot config:
+
+      config :my_app, MyApp.SlackBot,
+        diagnostics: [
+          enabled: true,
+          buffer_size: 200  # Keeps most recent 200 events
+        ]
+
+  **Security note:** The buffer retains full Slack payloads including user messages.
+  Only enable in environments where storing this data is acceptable, and clear the
+  buffer when working with sensitive workspaces.
+
+  ## Workflow: Capture, Inspect, Replay
+
+  ### 1. Capture Events
+
+  With diagnostics enabled, SlackBot automatically records all events. Run your bot
+  and interact with it in Slack.
+
+  ### 2. List Captured Events
+
+      iex> SlackBot.Diagnostics.list(MyApp.SlackBot, limit: 5)
+      [
+        %{
+          id: 12345,
+          at: ~U[2025-12-01 10:30:00Z],
+          direction: :inbound,
+          type: "slash_commands",
+          payload: %{"command" => "/deploy", ...}
+        },
+        ...
+      ]
+
+  Filter by event type:
+
+      iex> SlackBot.Diagnostics.list(MyApp.SlackBot,
+      ...>   types: ["message", "app_mention"])
+
+  ### 3. Replay Events
+
+  Replay captured events through your handlers to reproduce behavior:
+
+      iex> SlackBot.Diagnostics.replay(MyApp.SlackBot,
+      ...>   types: ["slash_commands"],
+      ...>   since: ~U[2025-12-01 10:00:00Z])
+      {:ok, 3}  # Replayed 3 events
+
+  This re-runs the events through your current handler code, making it easy to:
+
+  - Test fixes for reported bugs
+  - Validate handler changes without hitting Slack
+  - Understand handler behavior with real production data
+
+  ### 4. Clear the Buffer
+
+  After debugging, clear sensitive data:
+
+      iex> SlackBot.Diagnostics.clear(MyApp.SlackBot)
+      :ok
+
+  ## Production Usage
+
+  Keep diagnostics **disabled** in production by default. Enable temporarily when
+  investigating issues, capture the relevant events, then disable and clear:
+
+      # In production IEx session
+      iex> Application.put_env(:my_app, MyApp.SlackBot,
+      ...>   diagnostics: [enabled: true, buffer_size: 50])
+      iex> # ... wait for events ...
+      iex> events = SlackBot.Diagnostics.list(MyApp.SlackBot)
+      iex> File.write!("events.json", Jason.encode!(events))
+      iex> SlackBot.Diagnostics.clear(MyApp.SlackBot)
+
+  ## See Also
+
+  - [Diagnostics Guide](https://hexdocs.pm/slack_bot_ws/diagnostics.html)
+  - `SlackBot.TelemetryStats` - For aggregated metrics without payload retention
+  - `BasicBot` - Example demonstrating diagnostics capture
   """
 
   alias SlackBot.Config
