@@ -1,8 +1,10 @@
 # SlackBot (WebSocket)
 
+[![CI](https://github.com/dfeuerbach/slack_bot_ws/actions/workflows/ci.yml/badge.svg)](https://github.com/dfeuerbach/slack_bot_ws/actions/workflows/ci.yml)
+
 ![SlackBot WS](docs/images/slack_bot_ws_logo.png)
 
-SlackBot is a production-ready Slack bot framework for Elixir built on Socket Mode. It gives you a supervised WebSocket connection, tier-aware rate limiting, deterministic slash-command parsing via a compile-time grammar DSL, and full Telemetry coverage. The event pipeline handles backoff, heartbeats, reconnects, and dedupe so you can focus on your handlers instead of connection management.
+SlackBot is a production-ready Slack bot framework for Elixir built for Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/). It gives you a supervised WebSocket connection, tier-aware rate limiting, deterministic slash-command parsing via a compile-time grammar DSL, and full Telemetry coverage. The event pipeline handles backoff, heartbeats, reconnects, and dedupe so you can focus on your handlers instead of connection management.
 
 ### When to use Socket Mode
 
