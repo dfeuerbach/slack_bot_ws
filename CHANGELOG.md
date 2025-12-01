@@ -40,8 +40,14 @@ This release candidate represents what I expect will become the 1.0 stable API.
 - Slash auto-ack strategies (`:silent`, `:ephemeral`, `{:custom, fun}`) with configurable default text and response-url transport.
 - Plug-like middleware pipeline for cross-cutting concerns (logging, auth, metrics) across all handlers, with sequential execution of every `handle_event/3` defined for an event type and short-circuit control via `{:halt, resp}`.
 - Optional BlockBox integration for Block Kit helpers, `SlackBot.emit/2` for synthetic events.
-- Example bot showcasing middleware, diagnostics, and slash grammars to accelerate ramp-up.
+- `mix slack_bot_ws.install` task powered by Igniter for zero-config scaffolding of bot module, config, and supervision wiring.
+- Complete runnable example bot in `examples/basic_bot/` (included in GitHub repo) demonstrating middleware, diagnostics, slash grammars, Block Kit, cache queries, and telemetry.
 - Live diagnostics ring buffer with replay tooling so developers can reproduce issues locally without relying on Slack retries.
+- Comprehensive API documentation with real Slack response structures, complete error handling patterns, and common error codes documented.
+- Copy-paste ready code examples throughout showing practical usage patterns for Web API calls, cache queries, and event handling.
+- "When to use" decision guidance for function variants (push vs push_async, ID vs email matchers, adapter choices).
+- Performance tips and caching behavior explanations for every public function.
+- Complete test helper documentation (TestHTTP, TestTransport) with full test examples for unit testing handlers.
 
 ### Extensibility
 - Pluggable event buffer and ack transports, configurable cache adapters, and `SlackBot.push/2` helper around `Req`.
