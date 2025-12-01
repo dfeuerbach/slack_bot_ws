@@ -62,6 +62,8 @@ jobs:
   quality:
     name: Code Quality
     runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
 
     steps:
       - name: Checkout
