@@ -65,8 +65,8 @@ defmodule Mix.Tasks.SlackBotWs.Install do
           3. Invite your bot to a channel and @mention it.
 
         Guides:
-          - Getting Started: https://hexdocs.pm/slack_bot_ws/getting_started.html
-          - Slash Grammar:   https://hexdocs.pm/slack_bot_ws/slash_grammar.html
+          - Getting Started: https://hexdocs.pm/slack_bot_ws/getting-started.html
+          - Slash Grammar:   https://hexdocs.pm/slack_bot_ws/slash-grammar.html
           - Diagnostics:     https://hexdocs.pm/slack_bot_ws/diagnostics.html
         """)
 
@@ -103,7 +103,7 @@ defmodule Mix.Tasks.SlackBotWs.Install do
       3. Add #{inspect(bot_module)} to your application supervisor's children list.
 
     For a complete walkthrough, see the Getting Started guide:
-    https://hexdocs.pm/slack_bot_ws/getting_started.html
+    https://hexdocs.pm/slack_bot_ws/getting-started.html
     """)
   end
 

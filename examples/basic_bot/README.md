@@ -15,8 +15,8 @@ A runnable Slack bot demonstrating SlackBot's key features. Use this as a refere
 ## Prerequisites
 
 - A Slack App configured for Socket Mode (see [Getting Started Guide](../../docs/getting_started.md))
-- `SLACK_APP_TOKEN` (starts with `xapp-`)
-- `SLACK_BOT_TOKEN` (starts with `xoxb-`)
+  - `SLACK_APP_TOKEN` (starts with `xapp-`)
+  - `SLACK_BOT_TOKEN` (starts with `xoxb-`)
 - Elixir 1.14+, OTP 25+
 
 ## Install & Run

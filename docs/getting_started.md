@@ -183,7 +183,7 @@ Try `/demo deploy` in Slack. The handler receives `%{action: "deploy"}` in `payl
 When your supervisor starts `MyApp.SlackBot`, SlackBot:
 
 1. Reads configuration from `:my_app` app env and validates tokens
-2. Starts a Finch pool for Web API requests
+2. Starts an HTTP pool for Web API requests
 3. Starts the ETS-backed cache and event buffer
 4. Calls `apps.connections.open` to get a WebSocket URL
 5. Opens the Socket Mode connection

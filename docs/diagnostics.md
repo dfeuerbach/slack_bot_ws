@@ -11,10 +11,9 @@ your runtime config and use the APIs below from `iex`, remote consoles, or tests
 ## Enabling Diagnostics
 
 ```elixir
-config :slack_bot_ws, SlackBot,
+config :my_app, MyApp.SlackBot,
   app_token: "...",
   bot_token: "...",
-  module: MyBot,
   diagnostics: [enabled: true, buffer_size: 300]
 ```
 

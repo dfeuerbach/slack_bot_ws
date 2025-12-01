@@ -130,7 +130,7 @@ event_buffer: {:ets, []}
 # Redis for multi-node
 event_buffer:
   {:adapter, SlackBot.EventBuffer.Adapters.Redis,
-   redis: [host: "127.0.0.1", port: 6379], namespace: "slackbot"}
+    redis: [host: "127.0.0.1", port: 6379], namespace: "slackbot"}
 ```
 
 ### Rate limiting

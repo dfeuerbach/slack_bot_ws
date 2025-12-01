@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.0] - 2025-11-30
 
-Initial release. This library is feature-complete and production-tested. A 1.0 release with semver stability guarantees is planned soon, but this is very, very close.
+Initial release. This library is feature-complete and production-tested. A 1.0 release with semver stability guarantees is planned soon.
 
 ### Performance & Scalability
 - Supervised WebSockex connection manager with immediate envelope ACKs and Task.Supervisor fan-out so handlers never block the socket loop.

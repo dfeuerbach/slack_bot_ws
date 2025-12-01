@@ -113,17 +113,21 @@ defmodule SlackBot.Config do
   @doc """
   Builds a `%SlackBot.Config{}` by merging application environment defaults with the provided `opts`.
 
+  Returns `{:ok, config}` on success, or `{:error, reason}` if validation fails.
+
   ## Examples
 
-      iex> defmodule MyBot do
-      ...>   def handle_event(_type, _event, _ctx), do: :ok
-      ...> end
-      iex> Application.put_env(:slack_bot_ws, SlackBot, app_token: "xapp-1", bot_token: "xoxb-1", module: MyBot)
-      iex> SlackBot.Config.build()
-      {:ok, %SlackBot.Config{app_token: "xapp-1", bot_token: "xoxb-1", module: MyBot}}
+      # With explicit options
+      SlackBot.Config.build(
+        app_token: "xapp-...",
+        bot_token: "xoxb-...",
+        module: MyApp.SlackBot
+      )
+      #=> {:ok, %SlackBot.Config{...}}
 
-      iex> SlackBot.Config.build(app_token: "xapp", bot_token: "", module: MyBot)
-      {:error, {:invalid_bot_token, ""}}
+      # Missing or empty tokens return errors
+      SlackBot.Config.build(app_token: "xapp-...", bot_token: "", module: MyBot)
+      #=> {:error, {:invalid_bot_token, ""}}
   """
   @spec build(keyword()) :: {:ok, t()} | {:error, term()}
   def build(opts \\ []) when is_list(opts) do
@@ -437,7 +441,8 @@ defmodule SlackBot.Config do
         true -> :invalid
       end
 
-    with %{enabled: enabled, flush_interval_ms: flush, ttl_ms: ttl} = value when map != :invalid <- map,
+    with %{enabled: enabled, flush_interval_ms: flush, ttl_ms: ttl} = value when map != :invalid <-
+           map,
          true <- is_boolean(enabled) || {:error, {:invalid_telemetry_stats_enabled, enabled}},
          true <- positive?(flush) || {:error, {:invalid_telemetry_stats_flush, flush}},
          true <- positive?(ttl) || {:error, {:invalid_telemetry_stats_ttl, ttl}} do
