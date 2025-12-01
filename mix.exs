@@ -23,7 +23,8 @@ defmodule SlackBot.MixProject do
           "docs/slash_grammar.md",
           "docs/diagnostics.md",
           "docs/telemetry_dashboard.md",
-          "CHANGELOG.md"
+          "CHANGELOG.md",
+          "LICENSE"
         ],
         groups_for_extras: [
           Guides: [
