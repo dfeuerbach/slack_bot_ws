@@ -75,7 +75,9 @@ defmodule SlackBot.TelemetryStats do
 
     if Map.get(stats_opts, :enabled) do
       prefix = Map.get(config, :telemetry_prefix, [:slackbot])
-      handler_id = {:slackbot_telemetry_stats, config.instance_name, System.unique_integer([:positive])}
+
+      handler_id =
+        {:slackbot_telemetry_stats, config.instance_name, System.unique_integer([:positive])}
 
       state = %{
         config: config,
@@ -124,7 +126,7 @@ defmodule SlackBot.TelemetryStats do
   end
 
   defp attach_handler(%{handler_id: handler_id, prefix: prefix, prefix_len: len}) do
-    events = Enum.map(@events, &prefix ++ &1)
+    events = Enum.map(@events, &(prefix ++ &1))
     handler_config = %{pid: self(), prefix_len: len}
     :telemetry.attach_many(handler_id, events, &__MODULE__.handle_event/4, handler_config)
   end
@@ -259,7 +261,11 @@ defmodule SlackBot.TelemetryStats do
     |> update_in([:health, :statuses], fn statuses ->
       Map.update(statuses, status, 1, &(&1 + 1))
     end)
-    |> put_in([:health, :last_status], %{status: status, duration_ms: duration_ms, reason: Map.get(metadata, :reason)})
+    |> put_in([:health, :last_status], %{
+      status: status,
+      duration_ms: duration_ms,
+      reason: Map.get(metadata, :reason)
+    })
   end
 
   defp apply_event(stats, [:cache, :sync], measurements, metadata) do

@@ -272,7 +272,8 @@ defmodule SlackBot.RateLimiterTest do
 
       assert_receive {:telemetry, [:slackbot, :rate_limiter, :drain],
                       %{drained: 1, delay_ms: drain_delay},
-                      %{key: {:channel, "C-block"}, reason: :retry_after}}, 1_500
+                      %{key: {:channel, "C-block"}, reason: :retry_after}},
+                     1_500
 
       assert_in_delta(drain_delay, 1000, 200)
 

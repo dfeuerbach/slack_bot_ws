@@ -91,7 +91,8 @@ defmodule SlackBot.HealthMonitorTest do
 
     {:ok, _pid} =
       start_supervised(
-        {HealthMonitor, name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
+        {HealthMonitor,
+         name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
       )
 
     assert_receive {:health_ping, %{status: :ok}}, 200
@@ -102,7 +103,8 @@ defmodule SlackBot.HealthMonitorTest do
 
     {:ok, _pid} =
       start_supervised(
-        {HealthMonitor, name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
+        {HealthMonitor,
+         name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
       )
 
     assert eventually(fn ->
@@ -116,7 +118,8 @@ defmodule SlackBot.HealthMonitorTest do
 
     {:ok, _pid} =
       start_supervised(
-        {HealthMonitor, name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
+        {HealthMonitor,
+         name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
       )
 
     :timer.sleep(50)
@@ -142,7 +145,8 @@ defmodule SlackBot.HealthMonitorTest do
 
     {:ok, _pid} =
       start_supervised(
-        {HealthMonitor, name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
+        {HealthMonitor,
+         name: :hm_monitor, config_server: config_server, connection_manager: conn_mgr}
       )
 
     assert_receive {:health_ping, %{status: :fatal, reason: "invalid_auth"}}, 200

@@ -91,16 +91,16 @@ defmodule SlackBot.ConnectionTelemetryTest do
 
     assert_receive {:test_transport, transport_pid}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "hi"},
-      %{"envelope_id" => "ENV-1"}
-    )
+    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "hi"}, %{
+      "envelope_id" => "ENV-1"
+    })
 
     assert_receive {:telemetry_event, [:slackbot, :handler, :ingress], %{count: 1},
                     %{decision: :queue, envelope_id: "ENV-1", type: "message"}}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "hi"},
-      %{"envelope_id" => "ENV-1"}
-    )
+    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "hi"}, %{
+      "envelope_id" => "ENV-1"
+    })
 
     assert_receive {:telemetry_event, [:slackbot, :handler, :ingress], %{count: 1},
                     %{decision: :duplicate, envelope_id: "ENV-1", type: "message"}}
@@ -129,30 +129,36 @@ defmodule SlackBot.ConnectionTelemetryTest do
 
     assert_receive {:test_transport, transport_pid}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "ok"},
-      %{"envelope_id" => "ok-env"}
-    )
+    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "ok"}, %{
+      "envelope_id" => "ok-env"
+    })
 
     assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
                     %{status: :ok, envelope_id: "ok-env", type: "message"}}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "err", "handler_error" => true},
+    SlackBot.TestTransport.emit(
+      transport_pid,
+      "message",
+      %{"text" => "err", "handler_error" => true},
       %{"envelope_id" => "err-env"}
     )
 
     assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
                     %{status: :error, envelope_id: "err-env", type: "message"}}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "halt", "handler_halt" => true},
+    SlackBot.TestTransport.emit(
+      transport_pid,
+      "message",
+      %{"text" => "halt", "handler_halt" => true},
       %{"envelope_id" => "halt-env"}
     )
 
     assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
                     %{status: :halted, envelope_id: "halt-env", type: "message"}}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "boom", "raise" => true},
-      %{"envelope_id" => "exc-env"}
-    )
+    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "boom", "raise" => true}, %{
+      "envelope_id" => "exc-env"
+    })
 
     assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
                     %{status: :exception, envelope_id: "exc-env", type: "message"}}

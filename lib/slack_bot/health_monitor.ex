@@ -89,9 +89,7 @@ defmodule SlackBot.HealthMonitor do
        when is_integer(secs) and secs > 0 do
     delay_ms = max(secs * 1_000, state.interval_ms)
 
-    Logger.debug(
-      "[SlackBot] healthcheck ping status=:rate_limited delay_ms=#{delay_ms}"
-    )
+    Logger.debug("[SlackBot] healthcheck ping status=:rate_limited delay_ms=#{delay_ms}")
 
     Telemetry.execute(
       config,
@@ -105,9 +103,7 @@ defmodule SlackBot.HealthMonitor do
 
   defp handle_ping_result({:error, {:slack_error, reason}}, duration, state, %Config{} = config)
        when reason in ["invalid_auth", "account_inactive", "not_authed"] do
-    Logger.debug(
-      "[SlackBot] healthcheck ping status=:fatal reason=#{inspect(reason)}"
-    )
+    Logger.debug("[SlackBot] healthcheck ping status=:fatal reason=#{inspect(reason)}")
 
     Telemetry.execute(
       config,
@@ -121,9 +117,8 @@ defmodule SlackBot.HealthMonitor do
   end
 
   defp handle_ping_result({:error, reason}, duration, state, %Config{} = config) do
-    Logger.debug(
-      "[SlackBot] healthcheck ping status=:error reason=#{inspect(reason)}"
-    )
+    Logger.debug("[SlackBot] healthcheck ping status=:error reason=#{inspect(reason)}")
+
     Telemetry.execute(
       config,
       [:healthcheck, :ping],
@@ -138,9 +133,7 @@ defmodule SlackBot.HealthMonitor do
   end
 
   defp handle_ping_result(other, duration, state, %Config{} = config) do
-    Logger.debug(
-      "[SlackBot] healthcheck ping status=:unknown result=#{inspect(other)}"
-    )
+    Logger.debug("[SlackBot] healthcheck ping status=:unknown result=#{inspect(other)}")
 
     Telemetry.execute(
       config,

@@ -7,9 +7,10 @@ defmodule SlackBot.RuntimeSupervisorTest do
 
   test "Finch pools start before cache sync supervisor" do
     config_server =
-      start_supervised!({SlackBot.ConfigServer,
-        config: [app_token: "xapp-test", bot_token: "xoxb-test", module: Bot]
-      })
+      start_supervised!(
+        {SlackBot.ConfigServer,
+         config: [app_token: "xapp-test", bot_token: "xoxb-test", module: Bot]}
+      )
 
     base_name = Bot
     runtime_name = Module.concat(base_name, :RuntimeSupervisor)

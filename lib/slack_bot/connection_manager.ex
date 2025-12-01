@@ -146,8 +146,10 @@ defmodule SlackBot.ConnectionManager do
 
   defp connect(state) do
     config = ConfigServer.config(state.config_server)
+
     with {:ok, config_with_identity} <- discover_identity(config),
-         {:ok, url} <- config_with_identity.http_client.apps_connections_open(config_with_identity) do
+         {:ok, url} <-
+           config_with_identity.http_client.apps_connections_open(config_with_identity) do
       state = %{state | config: config_with_identity}
       start_transport(url, state)
     else

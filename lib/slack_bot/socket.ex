@@ -50,7 +50,8 @@ defmodule SlackBot.Socket do
         Logger.debug("[SlackBot.Socket] incoming frame #{inspect(decoded)}")
         handle_decoded(decoded, state)
 
-      {:error, reason} -> log_decode_error(reason, payload, state)
+      {:error, reason} ->
+        log_decode_error(reason, payload, state)
     end
   end
 
