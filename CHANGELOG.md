@@ -39,7 +39,8 @@ This release candidate represents what I expect will become the 1.0 stable API.
 - Declarative handler DSL (`handle_event`, `slash`, grammar combinators, middleware) powered by NimbleParsec for deterministic slash command parsing.
 - Slash auto-ack strategies (`:silent`, `:ephemeral`, `{:custom, fun}`) with configurable default text and response-url transport.
 - Plug-like middleware pipeline for cross-cutting concerns (logging, auth, metrics) across all handlers, with sequential execution of every `handle_event/3` defined for an event type and short-circuit control via `{:halt, resp}`.
-- Optional BlockBox integration for Block Kit helpers, `SlackBot.emit/2` for synthetic events.
+- Optional BlockBox integration for building rich Block Kit payloads with ergonomic Elixir DSL.
+- `SlackBot.emit/2` for injecting synthetic events into the handler pipeline (testing, scheduled tasks, internal events).
 - `mix slack_bot_ws.install` task powered by Igniter for zero-config scaffolding of bot module, config, and supervision wiring.
 - Complete runnable example bot in `examples/basic_bot/` (included in GitHub repo) demonstrating middleware, diagnostics, slash grammars, Block Kit, cache queries, and telemetry.
 - Live diagnostics ring buffer with replay tooling so developers can reproduce issues locally without relying on Slack retries.
@@ -50,13 +51,15 @@ This release candidate represents what I expect will become the 1.0 stable API.
 - Complete test helper documentation (TestHTTP, TestTransport) with full test examples for unit testing handlers.
 
 ### Extensibility
-- Pluggable event buffer and ack transports, configurable cache adapters, and `SlackBot.push/2` helper around `Req`.
-- Hex package metadata plus changelog to support publishing to Hex.pm.
+- Pluggable cache adapters via `SlackBot.Cache.Adapter` behaviour (ETS default, Redis implementation included).
+- Pluggable event buffer adapters via `SlackBot.EventBuffer.Adapter` behaviour for multi-node dedupe strategies.
+- Configurable HTTP client and WebSocket transport for testing and custom integrations.
+- Custom slash command acknowledgement callbacks for domain-specific response patterns.
 
 ### What's Next?
 
-After gathering community feedback and real-world validation:
-- **0.1.0** - Stable release incorporating any RC feedback
+After gathering community feedback and real-world validation, and possible adjustments to documentation:
+- **0.1.0** - Initial release incorporating any RC feedback. Intention to move to 1.0 as soon as possible.
 - **1.0.0** - Long-term stable API with full semver guarantees
 
 The path from RC to 1.0 will focus on validating the API in production rather than adding features. Breaking changes between RC and 1.0 will only be introduced if critical issues are discovered.
