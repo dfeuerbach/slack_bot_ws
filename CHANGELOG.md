@@ -5,11 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [Unreleased]
 
-## [0.1.0] - 2025-11-30
+N/A
 
-Initial release. This library is feature-complete and production-tested. A 1.0 release with semver stability guarantees is planned soon.
+## [0.1.0-rc.1] - 2025-12-01
+
+**Initial Release Candidate**
+
+This release candidate represents what I expect will become the 1.0 stable API.
+
+**Feedback Welcome!** If you encounter issues, have suggestions, or want to share your experience, please [open an issue on GitHub](https://github.com/dfeuerbach/slack_bot_ws/issues).
+
+### What's Included
 
 ### Performance & Scalability
 - Supervised WebSockex connection manager with immediate envelope ACKs and Task.Supervisor fan-out so handlers never block the socket loop.
@@ -39,4 +47,11 @@ Initial release. This library is feature-complete and production-tested. A 1.0 r
 - Pluggable event buffer and ack transports, configurable cache adapters, and `SlackBot.push/2` helper around `Req`.
 - Hex package metadata plus changelog to support publishing to Hex.pm.
 
+### What's Next?
+
+After gathering community feedback and real-world validation:
+- **0.1.0** - Stable release incorporating any RC feedback
+- **1.0.0** - Long-term stable API with full semver guarantees
+
+The path from RC to 1.0 will focus on validating the API in production rather than adding features. Breaking changes between RC and 1.0 will only be introduced if critical issues are discovered.
 
