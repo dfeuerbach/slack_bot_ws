@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+env:
+  MIX_ENV: test
+
+jobs:
+  test:
+    name: Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Oldest supported combination
+          - elixir: "1.14"
+            otp: "24"
+          # Middle ground
+          - elixir: "1.15"
+            otp: "25"
+          - elixir: "1.16"
+            otp: "26"
+          # Latest stable
+          - elixir: "1.17"
+            otp: "27"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Run tests
+        run: mix test
+
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.17"
+          otp-version: "27"
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-quality-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-quality-
+
+      - name: Install dependencies
+        run: mix deps.get
+
+      - name: Check formatting
+        run: mix format --check-formatted
+
+      - name: Generate docs (verify no warnings)
+        run: mix docs 2>&1 | tee docs_output.txt && ! grep -q "warning:" docs_output.txt
+
