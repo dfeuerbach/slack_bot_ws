@@ -30,3 +30,5 @@ erl_crash.dump
 slack_bot_ws-*.tar
 
 ref
+
+.cursor
