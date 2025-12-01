@@ -50,6 +50,8 @@ defmodule SlackBot.IdentityFailureTest do
           )
 
         refute_receive {:test_transport, _pid}, 50
+        # Give GenServer time to process :connect and log error
+        Process.sleep(300)
       end)
 
     assert log =~ "failed to discover bot user id"
