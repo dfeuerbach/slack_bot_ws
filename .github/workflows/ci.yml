@@ -92,5 +92,10 @@ jobs:
         run: mix format --check-formatted
 
       - name: Generate docs (verify no warnings)
-        run: mix docs 2>&1 | tee docs_output.txt && ! grep -q "warning:" docs_output.txt
+        run: |
+          mix docs 2>&1 | tee docs_output.txt
+          if grep -i "warning:" docs_output.txt; then
+            echo "Documentation warnings found!"
+            exit 1
+          fi
 
