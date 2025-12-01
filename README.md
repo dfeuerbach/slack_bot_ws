@@ -1,6 +1,9 @@
 # SlackBot (WebSocket)
 
 [![CI](https://github.com/dfeuerbach/slack_bot_ws/actions/workflows/ci.yml/badge.svg)](https://github.com/dfeuerbach/slack_bot_ws/actions/workflows/ci.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/slack_bot_ws.svg)](https://hex.pm/packages/slack_bot_ws)
+[![Documentation](https://img.shields.io/badge/hex-docs-purple.svg)](https://hexdocs.pm/slack_bot_ws/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ![SlackBot WS](docs/images/slack_bot_ws_logo.png)
 
