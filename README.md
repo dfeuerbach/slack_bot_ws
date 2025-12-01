@@ -99,7 +99,7 @@ That's it. SlackBot boots a Socket Mode connection with ETS-backed cache and eve
 - **Slash-command grammar DSL** — describe expected syntax declaratively; SlackBot compiles it into a parser at build time (see [Slash Grammar Guide](docs/slash_grammar.md))
 - **Pluggable adapters** — swap ETS for Redis when you need cross-node dedupe or shared state
 - **Native interactivity routing** — shortcuts, message actions, block suggestions, modal submissions all dispatch through the same pipeline
-- **Optional BlockBox integration** — compose Block Kit payloads ergonomically when the dependency is present
+- **Optional [BlockBox](https://hex.pm/packages/blockbox) integration** — compose Block Kit payloads ergonomically when the dependency is present
 - **Telemetry + diagnostics** — connection lifecycle, handler spans, rate/tier limiter decisions, and a ring buffer you can replay in IEx
 
 ## Advanced Configuration
@@ -291,7 +291,7 @@ The `examples/basic_bot/` directory contains a runnable project demonstrating:
 - middleware logging
 - diagnostics capture and replay
 - auto-ack strategies
-- optional BlockBox helpers
+- optional [BlockBox](https://hex.pm/packages/blockbox) helpers
 
 Follow the README inside that folder to run it against a Slack dev workspace.
 
