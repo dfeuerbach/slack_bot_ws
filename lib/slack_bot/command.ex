@@ -39,13 +39,11 @@ defmodule SlackBot.Command do
   The slash grammar DSL uses these tokens under the hood:
 
       slash "/deploy" do
-        grammar do
-          value :service        # Matches one token
-          literal "canary"      # Matches the literal word "canary"
-          repeat do
-            literal "env"
-            value :environments
-          end
+        value :service        # Matches one token
+        literal "canary"      # Matches the literal word "canary"
+        repeat do
+          literal "env"
+          value :environments
         end
 
         handle payload, _ctx do

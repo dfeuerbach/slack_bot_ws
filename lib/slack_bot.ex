@@ -23,10 +23,6 @@ defmodule SlackBot do
         end
 
         slash "/ping" do
-          grammar do
-            # Empty grammar matches just "/ping"
-          end
-
           handle _payload, _ctx do
             {:ok, %{"text" => "Pong!"}}
           end

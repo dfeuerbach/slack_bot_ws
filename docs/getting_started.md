@@ -154,9 +154,7 @@ defmodule MyApp.SlackBot do
   use SlackBot, otp_app: :my_app
 
   slash "/demo" do
-    grammar do
-      value :action
-    end
+    value :action
 
     handle payload, _ctx do
       action = payload["parsed"][:action] || "nothing"

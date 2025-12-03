@@ -54,51 +54,49 @@ defmodule BasicBot do
   end
 
   slash "/demo" do
-    grammar do
-      choice do
-        sequence do
-          literal("list", as: :mode, value: :list)
-          optional(literal("short", as: :short?))
-          value(:subject)
+    choice do
+      sequence do
+        literal("list", as: :mode, value: :list)
+        optional(literal("short", as: :short?))
+        value(:subject)
 
-          repeat do
-            literal("tag")
-            value(:tags)
-          end
+        repeat do
+          literal("tag")
+          value(:tags)
         end
+      end
 
-        sequence do
-          literal("report", as: :mode, value: :report)
-          value(:team)
-        end
+      sequence do
+        literal("report", as: :mode, value: :report)
+        value(:team)
+      end
 
-        sequence do
-          literal("blocks", as: :mode, value: :blocks)
-        end
+      sequence do
+        literal("blocks", as: :mode, value: :blocks)
+      end
 
-        sequence do
-          literal("ping-ephemeral", as: :mode, value: :ping_ephemeral)
-        end
+      sequence do
+        literal("ping-ephemeral", as: :mode, value: :ping_ephemeral)
+      end
 
-        sequence do
-          literal("async-demo", as: :mode, value: :async_demo)
-        end
+      sequence do
+        literal("async-demo", as: :mode, value: :async_demo)
+      end
 
-        sequence do
-          literal("help", as: :mode, value: :help)
-        end
+      sequence do
+        literal("help", as: :mode, value: :help)
+      end
 
-        sequence do
-          literal("users", as: :mode, value: :users)
-        end
+      sequence do
+        literal("users", as: :mode, value: :users)
+      end
 
-        sequence do
-          literal("channels", as: :mode, value: :channels)
-        end
+      sequence do
+        literal("channels", as: :mode, value: :channels)
+      end
 
-        sequence do
-          literal("telemetry", as: :mode, value: :telemetry)
-        end
+      sequence do
+        literal("telemetry", as: :mode, value: :telemetry)
       end
     end
 

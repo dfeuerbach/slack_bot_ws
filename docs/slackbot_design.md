@@ -81,14 +81,12 @@ SlackBot.Supervisor
 - DSL example:
   ```elixir
   slash "/deploy" do
-    grammar do
-      value :service
-      optional literal("short", as: :short?)
-      repeat do
-        literal "param"
-        value :params
-      end
-    end
+  value :service
+  optional literal("short", as: :short?)
+  repeat do
+    literal "param"
+    value :params
+  end
 
     handle payload, ctx do
       parsed = payload["parsed"]

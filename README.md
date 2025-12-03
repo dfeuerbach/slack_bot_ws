@@ -265,6 +265,69 @@ user_cache: [
 ]
 ```
 
+## Event Pipeline & Middleware
+
+SlackBot routes events through a Plug-like pipeline. Middleware runs before handlers and can short-circuit with `{:halt, response}`. Multiple `handle_event` clauses for the same type run in declaration order.
+
+```elixir
+defmodule MyApp.Router do
+  use SlackBot
+
+  defmodule LogMiddleware do
+    def call("message", payload, ctx) do
+      Logger.debug("incoming: #{payload["text"]}")
+      {:cont, payload, ctx}
+    end
+
+    def call(_type, payload, ctx), do: {:cont, payload, ctx}
+  end
+
+  middleware LogMiddleware
+
+  handle_event "message", payload, ctx do
+    Cache.record(payload)
+  end
+
+  handle_event "message", payload, ctx do
+    Replies.respond(payload, ctx)
+  end
+end
+```
+
+## Slash Command Grammar
+
+The `slash/2` DSL compiles grammar declarations into deterministic parsers:
+
+```elixir
+slash "/deploy" do
+  value :service
+  optional literal("canary", as: :canary?)
+  repeat do
+    literal "env"
+    value :envs
+  end
+
+  handle payload, ctx do
+    %{service: svc, envs: envs} = payload["parsed"]
+    Deployments.kick(svc, envs, ctx)
+  end
+end
+```
+
+| Input | Parsed |
+| --- | --- |
+| `/deploy api` | `%{service: "api"}` |
+| `/deploy api canary env staging env prod` | `%{service: "api", canary?: true, envs: ["staging", "prod"]}` |
+
+See [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
+
+## Web API Helpers
+
+- `SlackBot.push/2` — synchronous; waits for Slack's response
+- `SlackBot.push_async/2` — fire-and-forget under the managed Task.Supervisor
+
+Both route through the rate limiter and Telemetry pipeline automatically.
+
 ## Diagnostics & Replay
 
 ```elixir
