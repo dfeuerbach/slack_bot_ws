@@ -7,22 +7,109 @@
 
 ![SlackBot WS](docs/images/slack_bot_ws_logo.png)
 
-SlackBot is a production-ready Slack bot framework for Elixir built for Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/). It gives you a supervised WebSocket connection, tier-aware rate limiting, deterministic slash-command parsing via a compile-time grammar DSL, and full Telemetry coverage. The event pipeline handles backoff, heartbeats, reconnects, and dedupe so you can focus on your handlers instead of connection management.
+> Reconnects. Backoff. Heartbeats. Per-method rate limits. Traffic shaping. SlackBot WS handles all of it—so you can ship the bot instead of babysitting Slack's complexity.
 
-### When to use Socket Mode
+SlackBot is a production-ready Slack bot framework for Elixir built for Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/). It gives you a supervised WebSocket connection, tier-aware rate limiting, deterministic slash-command parsing via a compile-time grammar DSL, Plug-like middleware, and full Telemetry coverage.
 
-A WebSocket-based bot is ideal when you want real-time event delivery without exposing a public HTTP endpoint. It excels in environments behind firewalls, on developer laptops, or in architectures where inbound webhooks are undesirable. Persistent connections give you lower-latency interactions, consistent delivery of interactive payloads, and simpler local development. If you want a resilient, stateful channel to Slack that avoids the complexity of managing public callbacks, Socket Mode is the right fit.
+Socket Mode shines when you need real-time event delivery without a public HTTP endpoint: laptops, firewalled environments, or stacks where inbound webhooks are undesirable. Persistent connections keep latency low, interactive payloads flowing, and local development simple.
 
-## What you get
+**Ready to build?** [GitHub](https://github.com/dfeuerbach/slack_bot_ws) • [Hex](https://hex.pm/packages/slack_bot_ws) • [Docs](https://hexdocs.pm/slack_bot_ws/)
 
-- A supervised connection that handles backoff, heartbeats, and reconnects so your bot stays online
-- Tier-aware rate limiting that respects Slack's published quotas without you writing throttling code
-- A compile-time slash-command grammar that turns `/cmd team marketing show` into `%{mode: :team_show, team_name: "marketing"}`
-- Pluggable cache and event buffer adapters—ETS handles most workloads on a single node; swap to Redis when you need multi-node redundancy or have external requirements for shared state
-- Full Telemetry coverage and an optional diagnostics ring buffer for production debugging
-- Sensible defaults: add API tokens, supervise the module, and you have a working bot
+## Why SlackBot WS?
+
+- **Resilient Socket Mode connection** — supervised transport handles backoff, jittered retries, dedupe, heartbeats, and HTTP-based health checks (`auth.test`) so your bot stays online.
+- **Tier-aware rate limiting** — per-channel and per-workspace shaping plus Slack's published tier quotas are enforced automatically; override the registry when you need custom allowances.
+- **Deterministic slash-command grammar** — declaratively describe `/deploy api canary` or more complex syntaxes and get structured maps at compile time—no regex piles.
+- **Plug-like routing & middleware** — `handle_event`, `slash`, and `middleware` macros let you compose pipelines instead of sprawling case statements.
+- **Task-based fan-out** — handlers run in supervised tasks so slow commands never block the socket loop.
+- **Native interactivity + BlockBox** — shortcuts, message actions, block suggestions, modal submissions, and optional [BlockBox](https://hex.pm/packages/blockbox) helpers all flow through the same pipeline.
+- **Pluggable adapters & cache sync** — ETS cache/event buffer by default; swap to Redis for multi-node, configure cache sync, and set assigns such as `:bot_user_id` for zero-cost membership checks.
+- **Observability & diagnostics** — telemetry spans, optional telemetry stats, diagnostics ring buffer with replay, and LiveDashboard-ready metrics.
+- **Production defaults out of the box** — add tokens, supervise the module, and you have heartbeats, backoff, and rate limiting without touching config.
 
 > **New to Slack bots?** The [Getting Started guide](docs/getting_started.md) walks through creating a Slack App, enabling Socket Mode, obtaining tokens, and running your first handler.
+
+## See it in action
+
+### Declarative slash commands
+
+```elixir
+defmodule MyApp.SlackBot do
+  use SlackBot, otp_app: :my_app
+
+  # /deploy api        → %{service: "api"}
+  # /deploy api canary → %{service: "api", canary?: true}
+  slash "/deploy" do
+    grammar do
+      value :service
+      optional literal("canary", as: :canary?)
+      repeat do
+        literal "env"
+        value :envs
+      end
+    end
+
+    handle payload, ctx do
+      %{service: svc, envs: envs} = payload["parsed"]
+      Deployments.kick(svc, envs, ctx)
+    end
+  end
+end
+```
+
+| Input | Parsed |
+| --- | --- |
+| `/deploy api` | `%{service: "api"}` |
+| `/deploy api canary env staging env prod` | `%{service: "api", canary?: true, envs: ["staging", "prod"]}` |
+
+See the [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
+
+### Plug-like middleware pipeline
+
+SlackBot routes events through a Plug-like pipeline. Middleware runs before handlers and can short-circuit with `{:halt, response}`. Multiple `handle_event` clauses for the same type run in declaration order.
+
+```elixir
+defmodule MyApp.Router do
+  use SlackBot
+
+  defmodule LogMiddleware do
+    def call("message", payload, ctx) do
+      Logger.debug("incoming: #{payload["text"]}")
+      {:cont, payload, ctx}
+    end
+
+    def call(_type, payload, ctx), do: {:cont, payload, ctx}
+  end
+
+  middleware LogMiddleware
+
+  handle_event "message", payload, ctx do
+    Cache.record(payload)
+  end
+
+  handle_event "message", payload, ctx do
+    Replies.respond(payload, ctx)
+  end
+end
+```
+
+### Event handlers + Web API helpers
+
+```elixir
+defmodule MyApp.SlackBot do
+  use SlackBot, otp_app: :my_app
+
+  handle_event "app_mention", event, _ctx do
+    SlackBot.push({"chat.postMessage", %{
+      "channel" => event["channel"],
+      "text" => "Hi <@#{event["user"]}>!"
+    }})
+  end
+end
+```
+
+- `SlackBot.push/2` is synchronous and waits for Slack's response via the managed HTTP pool, telemetry pipeline, and rate limiter.
+- `SlackBot.push_async/2` is fire-and-forget under the supervised Task pipeline—perfect for long-running replies or batched API work.
 
 ## Quick Start
 
@@ -90,17 +177,6 @@ Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
 That's it. SlackBot boots a Socket Mode connection with ETS-backed cache and event buffer, per-workspace/per-channel rate limiting, and default backoff/heartbeat settings. When you're ready to tune behavior, read on.
-
-## Highlights
-
-- **Supervised connection manager** — WebSocket transport with rate-limit aware backoff, HTTP-based health monitoring (`auth.test` pings), and automatic reconnects
-- **Task-based fan-out** — handlers run in supervised tasks so slow commands never block the socket loop
-- **Declarative routing** — `handle_event`, `slash`, and `middleware` macros let you compose handlers without sprawling case statements
-- **Slash-command grammar DSL** — describe expected syntax declaratively; SlackBot compiles it into a parser at build time (see [Slash Grammar Guide](docs/slash_grammar.md))
-- **Pluggable adapters** — swap ETS for Redis when you need cross-node dedupe or shared state
-- **Native interactivity routing** — shortcuts, message actions, block suggestions, modal submissions all dispatch through the same pipeline
-- **Optional [BlockBox](https://hex.pm/packages/blockbox) integration** — compose Block Kit payloads ergonomically when the dependency is present
-- **Telemetry + diagnostics** — connection lifecycle, handler spans, rate/tier limiter decisions, and a ring buffer you can replay in IEx
 
 ## Advanced Configuration
 
@@ -188,71 +264,6 @@ user_cache: [
   cleanup_interval_ms: :timer.minutes(5)
 ]
 ```
-
-## Event Pipeline & Middleware
-
-SlackBot routes events through a Plug-like pipeline. Middleware runs before handlers and can short-circuit with `{:halt, response}`. Multiple `handle_event` clauses for the same type run in declaration order.
-
-```elixir
-defmodule MyApp.Router do
-  use SlackBot
-
-  defmodule LogMiddleware do
-    def call("message", payload, ctx) do
-      Logger.debug("incoming: #{payload["text"]}")
-      {:cont, payload, ctx}
-    end
-
-    def call(_type, payload, ctx), do: {:cont, payload, ctx}
-  end
-
-  middleware LogMiddleware
-
-  handle_event "message", payload, ctx do
-    Cache.record(payload)
-  end
-
-  handle_event "message", payload, ctx do
-    Replies.respond(payload, ctx)
-  end
-end
-```
-
-## Slash Command Grammar
-
-The `slash/2` DSL compiles grammar declarations into deterministic parsers:
-
-```elixir
-slash "/deploy" do
-  grammar do
-    value :service
-    optional literal("canary", as: :canary?)
-    repeat do
-      literal "env"
-      value :envs
-    end
-  end
-
-  handle payload, ctx do
-    %{service: svc, envs: envs} = payload["parsed"]
-    Deployments.kick(svc, envs, ctx)
-  end
-end
-```
-
-| Input | Parsed |
-| --- | --- |
-| `/deploy api` | `%{service: "api"}` |
-| `/deploy api canary env staging env prod` | `%{service: "api", canary?: true, envs: ["staging", "prod"]}` |
-
-See [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
-
-## Web API Helpers
-
-- `SlackBot.push/2` — synchronous; waits for Slack's response
-- `SlackBot.push_async/2` — fire-and-forget under the managed Task.Supervisor
-
-Both route through the rate limiter and Telemetry pipeline automatically.
 
 ## Diagnostics & Replay
 
