@@ -2,9 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [master, main]
+    branches: [master]
   pull_request:
-    branches: [master, main]
+    types: [opened, synchronize, reopened]
+    branches-ignore:
+      - "**/graphite-base/**"
+
+concurrency:
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || ''}}
+  cancel-in-progress: true
 
 env:
   MIX_ENV: test
@@ -37,25 +43,14 @@ jobs:
         with:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
-
-      - name: Cache deps
-        uses: actions/cache@v4
-        with:
-          path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
+          cache: mix
+          cache-key: mix-${{ matrix.elixir }}-${{ matrix.otp }}
 
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Compile (warnings as errors)
-        run: mix compile --warnings-as-errors
-
-      - name: Run tests
-        run: mix test
+      - name: Compile (warnings as errors) and run tests
+        run: mix do compile --warnings-as-errors, test
 
   quality:
     name: Code Quality
@@ -72,19 +67,11 @@ jobs:
         with:
           elixir-version: "1.19"
           otp-version: "28"
-
-      - name: Cache deps
-        uses: actions/cache@v4
-        with:
-          path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-quality-${{ hashFiles('**/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-quality-
+          cache: mix
+          cache-key: mix-quality
 
       - name: Install dependencies
-        run: mix deps.get
+        run: mix deps.get --only dev
 
       - name: Compile dependencies
         run: mix deps.compile
