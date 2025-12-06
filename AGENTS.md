@@ -39,7 +39,7 @@ non-obvious rules so that automated changes remain idiomatic and safe.
 - Treat modules that `use SlackBot` **without** `otp_app:` as **routers**, not processes.
   They define:
   - `handle_event/3` macros for events.
-  - `slash/2` + `grammar/1` for slash commands.
+  - `slash/2` for slash commands (everything before `handle/3` is the grammar).
   - `middleware/1` for the middleware pipeline.
 
 - Do not attempt to supervise router modules directly; always supervise the bot entrypoint

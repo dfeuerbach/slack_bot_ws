@@ -18,7 +18,6 @@ defmodule SlackBot.Router do
           middleware: 1,
           slash: 2,
           slash: 3,
-          grammar: 1,
           handle: 3,
           literal: 2,
           literal: 1,
@@ -56,7 +55,9 @@ defmodule SlackBot.Router do
   end
 
   @doc """
-  Declares a slash command with a grammar + handler pair.
+  Declares a slash command with a grammar + handler pair. Every expression that appears
+  before `handle/3` inside the block is treated as part of the grammar—you don't need a
+  wrapper macro.
 
   Supports `:ack` option (`:inherit`, `:silent`, `:ephemeral`, or `{:custom, fun}`) to
   override the configured auto-ack strategy.
@@ -67,14 +68,6 @@ defmodule SlackBot.Router do
 
   defmacro slash(command, opts, do: block) when is_binary(command) and is_list(opts) do
     build_slash(command, opts, block, __CALLER__)
-  end
-
-  @doc """
-  Wraps the grammar block for a given slash command.
-  """
-  defmacro grammar(do: block) do
-    nodes = __eval_nodes__(block, __CALLER__)
-    Macro.escape({:grammar, nodes})
   end
 
   @doc """
@@ -90,11 +83,14 @@ defmodule SlackBot.Router do
     expanded = Macro.prewalk(block, &Macro.expand(&1, env))
 
     entries = __normalize_block__(expanded)
-    grammar = fetch_section(entries, :grammar, env)
-    handler = fetch_section(entries, :handle, env)
+    {grammar_entries, handle_ast} = split_slash_sections(entries)
 
-    grammar_nodes = expand_grammar(grammar)
-    {payload, ctx, body} = handler
+    grammar_nodes =
+      grammar_entries
+      |> Enum.map(&eval_grammar_expr(&1, env))
+      |> expand_grammar()
+
+    {payload, ctx, body} = unpack_handle(handle_ast)
     fun = String.to_atom("__slackbot_slash_dsl_#{:erlang.unique_integer([:positive])}")
     normalized = normalize_command_literal(command)
     ack = Keyword.get(opts, :ack, :inherit)
@@ -348,35 +344,42 @@ defmodule SlackBot.Router do
     end)
   end
 
-  defp fetch_section(entries, :grammar, env) do
-    case Enum.find(entries, &match_ast?(:grammar, &1)) do
-      nil ->
-        raise ArgumentError, "missing grammar block"
+  defp split_slash_sections(entries) do
+    {grammar, rest} = Enum.split_while(entries, &(!match_handle_ast?(&1)))
 
-      expr ->
-        {value, _} = Code.eval_quoted(expr, [], env)
+    handle =
+      case rest do
+        [] ->
+          raise ArgumentError, "missing handle block"
 
-        case value do
-          {:grammar, nodes} -> nodes
-          _ -> raise ArgumentError, "invalid grammar definition"
-        end
-    end
+        [expr] ->
+          expr
+
+        [_handle_expr, extra | _] ->
+          raise ArgumentError,
+                "`handle` must be the final clause in a slash command, but found " <>
+                  Macro.to_string(extra)
+      end
+
+    {grammar, handle}
   end
 
-  defp fetch_section(entries, :handle, _env) do
-    case Enum.find(entries, &match_ast?(:handle, &1)) do
-      nil ->
-        raise ArgumentError, "missing handle block"
-
-      {:handle, payload, ctx, body} ->
-        {payload, ctx, body}
-
-      {:{}, _, [:handle, payload, ctx, body]} ->
-        {payload, ctx, body}
-    end
+  defp eval_grammar_expr(expr, env) do
+    {value, _} = Code.eval_quoted(expr, [], env)
+    value
   end
 
-  defp expand_grammar({:grammar, nodes}), do: expand_grammar(nodes)
+  defp unpack_handle({:handle, payload, ctx, body}), do: {payload, ctx, body}
+
+  defp unpack_handle({:{}, _, [:handle, payload, ctx, body]}), do: {payload, ctx, body}
+
+  defp unpack_handle(other) do
+    raise ArgumentError, "invalid handle block: #{Macro.to_string(other)}"
+  end
+
+  defp match_handle_ast?({:handle, _, _, _}), do: true
+  defp match_handle_ast?({:{}, _, [:handle | _]}), do: true
+  defp match_handle_ast?(_), do: false
 
   defp expand_grammar(nodes) when is_list(nodes) do
     Enum.flat_map(nodes, &expand_node/1)
@@ -464,11 +467,4 @@ defmodule SlackBot.Router do
   end
 
   defp maybe_ack(_mode, _payload, _ctx), do: :ok
-
-  defp match_ast?(label, {label, _, _}), do: true
-  defp match_ast?(label, {label, _}), do: true
-
-  defp match_ast?(label, {:{}, _, [label | _]}), do: true
-
-  defp match_ast?(_, _), do: false
 end

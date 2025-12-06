@@ -1,11 +1,39 @@
 defmodule SlackBot.RouterTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias SlackBot.Config
 
   defmodule TestMiddleware do
     def call("message", payload, ctx), do: {:cont, Map.put(payload, "tag", :processed), ctx}
     def call(_type, payload, ctx), do: {:cont, payload, ctx}
+  end
+
+  test "raises a helpful error when code appears after the handle clause" do
+    message =
+      assert_raise ArgumentError, fn ->
+        capture_log(fn ->
+          defmodule AfterHandleRouter do
+            use SlackBot
+
+            slash "/demo" do
+              literal("foo")
+
+              handle _payload, _ctx do
+                :ok
+              end
+
+              literal("bar")
+            end
+          end
+        end)
+      end
+
+    assert Exception.message(message) =~ "but found {:literal, \"bar\", []}"
+  after
+    :code.purge(AfterHandleRouter)
+    :code.delete(AfterHandleRouter)
   end
 
   defmodule HaltMiddleware do
@@ -23,13 +51,11 @@ defmodule SlackBot.RouterTest do
     end
 
     slash "/deploy" do
-      grammar do
-        value(:service)
+      value(:service)
 
-        optional do
-          literal("env")
-          value(:env)
-        end
+      optional do
+        literal("env")
+        value(:env)
       end
 
       handle payload, ctx do
@@ -42,9 +68,7 @@ defmodule SlackBot.RouterTest do
     use SlackBot
 
     slash "/deploy", ack: :silent do
-      grammar do
-        value(:service)
-      end
+      value(:service)
 
       handle payload, ctx do
         send(ctx.assigns.test_pid, {:slash_ack_override, payload["parsed"]})
@@ -56,9 +80,7 @@ defmodule SlackBot.RouterTest do
     use SlackBot
 
     slash "/deploy" do
-      grammar do
-        value(:service)
-      end
+      value(:service)
 
       handle payload, ctx do
         send(ctx.assigns.test_pid, {:multi, :deploy, payload["parsed"]})
@@ -66,9 +88,7 @@ defmodule SlackBot.RouterTest do
     end
 
     slash "/rollback" do
-      grammar do
-        value(:service)
-      end
+      value(:service)
 
       handle payload, ctx do
         send(ctx.assigns.test_pid, {:multi, :rollback, payload["parsed"]})
@@ -172,37 +192,35 @@ defmodule SlackBot.RouterTest do
     use SlackBot
 
     slash "/cmd" do
-      grammar do
-        choice do
-          sequence do
-            literal("list", as: :mode, value: :list)
-            optional(literal("short", as: :short?))
-            value(:app)
+      choice do
+        sequence do
+          literal("list", as: :mode, value: :list)
+          optional(literal("short", as: :short?))
+          value(:app)
 
-            repeat do
-              literal("param")
-              value(:params)
-            end
+          repeat do
+            literal("param")
+            value(:params)
           end
+        end
 
-          sequence do
-            literal("project", as: :mode, value: :project_report)
-            literal("report")
-          end
+        sequence do
+          literal("project", as: :mode, value: :project_report)
+          literal("report")
+        end
 
-          sequence do
-            literal("team", as: :mode, value: :team_show)
-            value(:team_name)
-            literal("show")
-          end
+        sequence do
+          literal("team", as: :mode, value: :team_show)
+          value(:team_name)
+          literal("show")
+        end
 
-          sequence do
-            literal("report", as: :mode, value: :report_teams)
+        sequence do
+          literal("report", as: :mode, value: :report_teams)
 
-            repeat do
-              literal("team")
-              value(:teams)
-            end
+          repeat do
+            literal("team")
+            value(:teams)
           end
         end
       end

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Refreshed the README landing narrative to more clearly explain SlackBot’s goals and quick-start path.
+### Changed
+- Simplified the slash command DSL so grammar definitions live directly before `handle/3`, removing the `grammar do ... end` wrapper and updating docs, examples, and tests accordingly.
 
 ## [0.1.0-rc.1] - 2025-12-01
 

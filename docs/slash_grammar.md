@@ -1,6 +1,6 @@
 # Slash Command Grammar DSL
 
-The `slash/2` DSL is built to make slash commands deterministic, easy to maintain, and fast. Instead of manually splitting strings or juggling regexes, you describe the format you expect and SlackBot generates a parser at compile time. This guide teaches the DSL in layers so you can follow along as the commands grow in complexity.
+The `slash/2` DSL is built to make slash commands deterministic, easy to maintain, and fast. Instead of manually splitting strings or juggling regexes, you describe the format you expect and SlackBot generates a parser at compile time. Write your grammar by chaining primitives (`literal/2`, `value/2`, `optional/1`, etc.) and always finish with a single `handle/3` clause—nothing may appear after `handle/3`, and the compiler raises if you try. This guide teaches the DSL in layers so you can follow along as the commands grow in complexity.
 
 ---
 
@@ -21,10 +21,8 @@ Great for “one-shot” commands that trigger behavior without arguments.
 
 ```elixir
 slash "/cmd" do
-  grammar do
-    literal "project"
-    literal "report"
-  end
+  literal "project"
+  literal "report"
 
   handle payload, ctx do
     # payload["parsed"] => %{command: "cmd"}
@@ -43,11 +41,9 @@ Use `value/1` to bind user-provided tokens to names that show up in the parsed p
 
 ```elixir
 slash "/cmd" do
-  grammar do
-    literal "team", as: :mode, value: :team_show
-    value :team_name
-    literal "show"
-  end
+  literal "team", as: :mode, value: :team_show
+  value :team_name
+  literal "show"
 
   handle payload, ctx do
     %{team_name: name} = payload["parsed"]
@@ -68,11 +64,9 @@ the parsed map.
 
 ```elixir
 slash "/cmd" do
-  grammar do
-    literal "list", as: :mode, value: :list
-    optional literal("short", as: :short?)
-    value :app
-  end
+  literal "list", as: :mode, value: :list
+  optional literal("short", as: :short?)
+  value :app
 
   handle payload, _ctx do
     payload["parsed"]
@@ -91,13 +85,11 @@ end
 
 ```elixir
 slash "/cmd" do
-  grammar do
-    literal "report", as: :mode, value: :report_teams
+  literal "report", as: :mode, value: :report_teams
 
-    repeat do
-      literal "team"
-      value :teams
-    end
+  repeat do
+    literal "team"
+    value :teams
   end
 
   handle payload, _ctx do
@@ -117,18 +109,16 @@ Many commands act like subcommands. `choice` lets you express each branch declar
 
 ```elixir
 slash "/cmd" do
-  grammar do
-    choice do
-      sequence do
-        literal "list", as: :mode, value: :list
-        optional literal("short", as: :short?)
-        value :app
-      end
+  choice do
+    sequence do
+      literal "list", as: :mode, value: :list
+      optional literal("short", as: :short?)
+      value :app
+    end
 
-      sequence do
-        literal "project", as: :mode, value: :project_report
-        literal "report"
-      end
+    sequence do
+      literal "project", as: :mode, value: :project_report
+      literal "report"
     end
   end
 
