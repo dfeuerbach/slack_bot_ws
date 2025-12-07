@@ -3,10 +3,28 @@ name: CI
 on:
   push:
     branches: [master]
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.pxd'
+      - '.formatter.exs'
+      - '.gitignore'
+      - '.credo.exs'
+      - '.sobelow-conf'
+      - 'LICENSE'
   pull_request:
     types: [opened, synchronize, reopened]
     branches-ignore:
       - "**/graphite-base/**"
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.png'
+      - '**/*.pxd'
+      - '.formatter.exs'
+      - '.gitignore'
+      - '.credo.exs'
+      - '.sobelow-conf'
+      - 'LICENSE'
 
 concurrency:
   group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || ''}}
