@@ -40,13 +40,11 @@ defmodule MyApp.SlackBot do
   # /deploy api        → %{service: "api"}
   # /deploy api canary → %{service: "api", canary?: true}
   slash "/deploy" do
-    grammar do
-      value :service
-      optional literal("canary", as: :canary?)
-      repeat do
-        literal "env"
-        value :envs
-      end
+    value :service
+    optional literal("canary", as: :canary?)
+    repeat do
+      literal "env"
+      value :envs
     end
 
     handle payload, ctx do
