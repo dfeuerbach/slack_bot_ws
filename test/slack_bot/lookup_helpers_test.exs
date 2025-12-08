@@ -56,40 +56,14 @@ defmodule SlackBot.LookupHelpersTest do
     assert nil == SlackBot.find_user(config, {:name, "unknown"})
   end
 
-  test "find_users batches lookups and can include misses", %{config: config} do
-    matchers = [{:name, "alice"}, {:name, "missing"}]
-
-    assert %{{:name, "alice"} => %{"id" => "U1"}} =
-             SlackBot.find_users(config, matchers)
-
-    assert %{
-             {:name, "alice"} => %{"id" => "U1"},
-             {:name, "missing"} => nil
-           } = SlackBot.find_users(config, matchers, include_missing?: true)
-  end
-
   test "find_channel supports id and name matchers", %{config: config} do
     assert %{"id" => "C1"} = SlackBot.find_channel(config, {:id, "C1"})
     assert %{"id" => "C1"} = SlackBot.find_channel(config, {:name, "#GENERAL"})
     assert %{"id" => "C2"} = SlackBot.find_channel(config, {:name, "random"})
   end
 
-  test "find_channels batches lookups", %{config: config} do
-    matchers = [{:name, "general"}, {:name, "unknown"}]
-
-    assert %{{:name, "general"} => %{"id" => "C1"}} =
-             SlackBot.find_channels(config, matchers)
-
-    assert %{
-             {:name, "general"} => %{"id" => "C1"},
-             {:name, "unknown"} => nil
-           } = SlackBot.find_channels(config, matchers, include_missing?: true)
-  end
-
   test "macro injects lookup shortcuts" do
     assert function_exported?(LookupBot, :find_user, 1)
-    assert function_exported?(LookupBot, :find_users, 2)
     assert function_exported?(LookupBot, :find_channel, 1)
-    assert function_exported?(LookupBot, :find_channels, 2)
   end
 end

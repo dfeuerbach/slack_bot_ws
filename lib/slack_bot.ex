@@ -79,9 +79,7 @@ defmodule SlackBot do
   ### Cache Queries
 
   - `find_user/2` - Lookup cached users by ID, email, or name
-  - `find_users/3` - Batch user lookup
   - `find_channel/2` - Lookup channels by ID or name
-  - `find_channels/3` - Batch channel lookup
 
   ### Event Injection
 
@@ -532,106 +530,15 @@ defmodule SlackBot do
   ## Performance Tips
 
   - Prefer `{:id, ...}` when you have the ID—it's a direct cache lookup
-  - Use `find_users/3` for batch lookups to reduce API calls
   - Email and name matchers scan the cache first before hitting the API
 
   ## See Also
 
-  - `find_users/3` - Batch lookup multiple users at once
   - `find_channel/2` - Similar function for channels
   """
   @spec find_user(GenServer.server(), user_matcher) :: map() | nil
   def find_user(server \\ __MODULE__, matcher) do
     Cache.find_user(server, matcher)
-  end
-
-  @doc """
-  Finds multiple cached Slack users in a single batch operation.
-
-  More efficient than calling `find_user/2` in a loop—reduces API calls and gives
-  you a convenient map of results keyed by your original matchers.
-
-  ## Arguments
-
-  - `matchers` - List of user matchers (same format as `find_user/2`)
-  - `opts` - Options:
-    - `include_missing?: false` - Set true to include `nil` entries for users not found
-
-  ## Returns
-
-  Map from matcher to user data (or `nil` when `include_missing?: true`)
-
-  ## Examples
-
-  ### Lookup team members
-
-      iex> team_emails = ["alice@ex.com", "bob@ex.com", "carol@ex.com"]
-      iex> matchers = Enum.map(team_emails, &{:email, &1})
-      iex> SlackBot.find_users(MyApp.SlackBot, matchers)
-      %{
-        {:email, "alice@ex.com"} => %{"id" => "U1", "name" => "alice", ...},
-        {:email, "bob@ex.com"} => %{"id" => "U2", "name" => "bob", ...},
-        {:email, "carol@ex.com"} => %{"id" => "U3", "name" => "carol", ...}
-      }
-
-  ### Include missing users
-
-      iex> SlackBot.find_users(MyApp.SlackBot,
-      ...>   [{:email, "exists@ex.com"}, {:email, "nope@ex.com"}],
-      ...>   include_missing?: true
-      ...> )
-      %{
-        {:email, "exists@ex.com"} => %{"id" => "U1", ...},
-        {:email, "nope@ex.com"} => nil
-      }
-
-  ### Practical: Notify multiple users
-
-      def notify_users(emails, message) do
-        matchers = Enum.map(emails, &{:email, &1})
-        users = SlackBot.find_users(MyBot, matchers)
-
-        results =
-          Enum.map(users, fn {_matcher, user} ->
-            SlackBot.push(MyBot, {"chat.postMessage", %{
-              "channel" => user["id"],
-              "text" => message
-            }})
-          end)
-
-        {:ok, length(results)}
-      end
-
-  ### Extract user IDs
-
-      users = SlackBot.find_users(MyBot, matchers)
-      user_ids = Enum.map(users, fn {_k, v} -> v["id"] end)
-
-  ## Performance
-
-  This is much faster than a loop of `find_user/2` calls because it:
-
-  - Batches cache lookups
-  - Reduces individual API calls
-  - Returns all results at once
-
-  ## See Also
-
-  - `find_user/2` - Single user lookup
-  - `find_channels/3` - Batch channel lookup
-  """
-  @spec find_users(GenServer.server(), [user_matcher], keyword()) ::
-          %{optional(user_matcher) => map() | nil}
-  def find_users(server \\ __MODULE__, matchers, opts \\ []) when is_list(matchers) do
-    include_missing? = Keyword.get(opts, :include_missing?, false)
-
-    Enum.reduce(matchers, %{}, fn matcher, acc ->
-      case find_user(server, matcher) do
-        nil when include_missing? -> Map.put(acc, matcher, nil)
-        nil -> acc
-        user -> Map.put(acc, matcher, user)
-      end
-    end)
   end
 
   @doc """
@@ -717,88 +624,16 @@ defmodule SlackBot do
   ## Performance Tips
 
   - Prefer `{:id, ...}` when you have the ID
-  - Use `find_channels/3` for batch lookups
   - Name lookups scan the cache (no extra API call once synced)
 
   ## See Also
 
-  - `find_channels/3` - Batch channel lookup
   - `find_user/2` - Similar function for users
   - Config option `cache_sync` - Controls channel cache refresh
   """
   @spec find_channel(GenServer.server(), channel_matcher) :: map() | nil
   def find_channel(server \\ __MODULE__, matcher) do
     Cache.find_channel(server, matcher)
-  end
-
-  @doc """
-  Finds multiple cached Slack channels in a single batch operation.
-
-  Like `find_users/3` but for channels—more efficient than looping `find_channel/2`.
-
-  ## Arguments
-
-  - `matchers` - List of channel matchers (same format as `find_channel/2`)
-  - `opts` - Options:
-    - `include_missing?: false` - Set true to include `nil` entries for channels not found
-
-  ## Returns
-
-  Map from matcher to channel data (or `nil` when `include_missing?: true`)
-
-  ## Examples
-
-  ### Find multiple channels
-
-      iex> SlackBot.find_channels(MyApp.SlackBot, [
-      ...>   {:name, "#general"},
-      ...>   {:name, "#engineering"},
-      ...>   {:id, "C789"}
-      ...> ])
-      %{
-        {:name, "#general"} => %{"id" => "C123", "name" => "general", ...},
-        {:name, "#engineering"} => %{"id" => "C456", "name" => "engineering", ...},
-        {:id, "C789"} => %{"id" => "C789", "name" => "random", ...}
-      }
-
-  ### Post to multiple channels
-
-      def broadcast_announcement(channel_names, message) do
-        matchers = Enum.map(channel_names, &{:name, &1})
-        channels = SlackBot.find_channels(MyBot, matchers)
-
-        Enum.each(channels, fn {_matcher, channel} ->
-          SlackBot.push_async(MyBot, {"chat.postMessage", %{
-            "channel" => channel["id"],
-            "text" => message
-          }})
-        end)
-
-        {:ok, map_size(channels)}
-      end
-
-  ### Extract channel IDs
-
-      channels = SlackBot.find_channels(MyBot, matchers)
-      channel_ids = Enum.map(channels, fn {_k, v} -> v["id"] end)
-
-  ## See Also
-
-  - `find_channel/2` - Single channel lookup
-  - `find_users/3` - Batch user lookup
-  """
-  @spec find_channels(GenServer.server(), [channel_matcher], keyword()) ::
-          %{optional(channel_matcher) => map() | nil}
-  def find_channels(server \\ __MODULE__, matchers, opts \\ []) when is_list(matchers) do
-    include_missing? = Keyword.get(opts, :include_missing?, false)
-
-    Enum.reduce(matchers, %{}, fn matcher, acc ->
-      case find_channel(server, matcher) do
-        nil when include_missing? -> Map.put(acc, matcher, nil)
-        nil -> acc
-        channel -> Map.put(acc, matcher, channel)
-      end
-    end)
   end
 
   defp split_opts(opts) do
@@ -847,20 +682,8 @@ defmodule SlackBot do
       def find_user(matcher), do: SlackBot.find_user(__MODULE__, matcher)
 
       @doc false
-      @spec find_users([SlackBot.user_matcher()], keyword()) ::
-              %{optional(SlackBot.user_matcher()) => map() | nil}
-      def find_users(matchers, opts \\ []),
-        do: SlackBot.find_users(__MODULE__, matchers, opts)
-
-      @doc false
       @spec find_channel(SlackBot.channel_matcher()) :: map() | nil
       def find_channel(matcher), do: SlackBot.find_channel(__MODULE__, matcher)
-
-      @doc false
-      @spec find_channels([SlackBot.channel_matcher()], keyword()) ::
-              %{optional(SlackBot.channel_matcher()) => map() | nil}
-      def find_channels(matchers, opts \\ []),
-        do: SlackBot.find_channels(__MODULE__, matchers, opts)
 
       if otp_app do
         @slackbot_otp_app otp_app
