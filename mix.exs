@@ -35,7 +35,13 @@ defmodule SlackBot.MixProject do
             "docs/telemetry_dashboard.md"
           ]
         ],
-        assets: %{"docs/images" => "docs/images"}
+        assets: %{"docs/images" => "docs/images"},
+        filter_modules: fn module, _meta ->
+          module
+          |> Atom.to_string()
+          |> String.starts_with?("Elixir.BasicBot")
+          |> Kernel.not()
+        end
       ]
     ]
   end

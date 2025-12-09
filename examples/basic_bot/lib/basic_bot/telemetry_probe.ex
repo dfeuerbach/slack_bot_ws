@@ -1,5 +1,17 @@
 defmodule BasicBot.TelemetryProbe do
-  @moduledoc false
+  @moduledoc """
+  Lightweight telemetry sampler used when `SlackBot.TelemetryStats` is disabled.
+
+  The Example bot prefers the rich metrics produced by `SlackBot.TelemetryStats`,
+  but some deployment environments may opt out of the stats process to keep
+  resource usage minimal. This probe subscribes directly to the telemetry
+  events emitted by SlackBot and builds a summarized snapshot that mimics the
+  richer structure. Handlers such as `BasicBot.telemetry_blocks/1` can then render
+  the snapshot without special-casing the data source.
+
+  Developers may also reuse this module in tests to simulate ingress/egress load
+  by calling `reset/1` before each scenario and `snapshot/1` afterwards.
+  """
 
   use GenServer
 
@@ -19,6 +31,38 @@ defmodule BasicBot.TelemetryProbe do
     [:ack, :http]
   ]
 
+  @typedoc "SlackBot module the probe watches."
+  @type bot :: module()
+
+  @typedoc """
+  Snapshot structure returned by `snapshot/1`.
+
+  The map purposefully mirrors the shape returned by `SlackBot.TelemetryStats`
+  so downstream presenters can treat both data sources uniformly.
+  """
+  @type snapshot :: %{
+          required(:generated_at) => DateTime.t(),
+          required(:cache) => map(),
+          required(:api) => map(),
+          required(:tier) => map(),
+          required(:rate_limiter) => map(),
+          required(:connection) => map(),
+          required(:health) => map(),
+          required(:ack) => map()
+        }
+
+  @doc """
+  Ensures the probe is running for the given `bot`.
+
+  Calling this function multiple times is idempotent. It is safe to invoke from
+  tests or IEx before requesting a snapshot.
+
+  ## Examples
+
+      iex> BasicBot.TelemetryProbe.ensure_started()
+      :ok
+  """
+  @spec ensure_started(bot()) :: :ok
   def ensure_started(bot \\ BasicBot.SlackBot) do
     name = server_name(bot)
 
@@ -32,17 +76,43 @@ defmodule BasicBot.TelemetryProbe do
     end
   end
 
+  @doc """
+  Starts the probe and links it to the caller.
+
+  ## Options
+
+    * `:bot` (required) – the SlackBot module whose events should be tracked.
+    * `:name` – optional registered name for the GenServer (defaults to
+      `Module.concat(bot, TelemetryProbe)`).
+
+  ## Return value
+
+  Matches `GenServer.start_link/3` (`{:ok, pid}` on success).
+  """
+  @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     bot = Keyword.fetch!(opts, :bot)
     name = Keyword.get(opts, :name, server_name(bot))
     GenServer.start_link(__MODULE__, [bot: bot], name: name)
   end
 
+  @doc """
+  Clears all aggregated counters for the given `bot`.
+
+  This is primarily useful in tests to create well-defined expectations.
+  """
+  @spec reset(bot()) :: :ok
   def reset(bot \\ BasicBot.SlackBot) do
     ensure_started(bot)
     GenServer.call(server_name(bot), :reset)
   end
 
+  @doc """
+  Returns the latest telemetry snapshot for the given `bot`.
+
+  If the probe is not yet running, it will be started automatically.
+  """
+  @spec snapshot(bot()) :: snapshot()
   def snapshot(bot \\ BasicBot.SlackBot) do
     ensure_started(bot)
     GenServer.call(server_name(bot), :snapshot)
@@ -131,6 +201,8 @@ defmodule BasicBot.TelemetryProbe do
     {:noreply, %{state | stats: stats}}
   end
 
+  @doc false
+  @spec handle_event([atom()], map(), map(), %{pid: pid(), prefix_len: non_neg_integer()}) :: :ok
   def handle_event(event, measurements, metadata, %{pid: pid, prefix_len: len}) do
     suffix = Enum.drop(event, len)
     send(pid, {:telemetry_event, suffix, measurements, metadata})

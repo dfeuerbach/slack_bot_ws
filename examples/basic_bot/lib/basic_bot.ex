@@ -12,6 +12,27 @@ defmodule BasicBot do
 
   middleware(SlackBot.Middleware.Logger)
 
+  @typedoc """
+  Normalized telemetry snapshot rendered into Block Kit.
+
+  The structure aggregates cache coverage, Web API counts, handler outcomes,
+  limiter stats, connection states, health checks, and ack metrics. It mirrors
+  the return shape of `SlackBot.TelemetryStats.snapshot/1` with a few extras that
+  BasicBot derives from cached data.
+  """
+  @type telemetry_snapshot :: %{
+          required(:source) => :telemetry_stats | :telemetry_probe | :legacy | atom(),
+          required(:generated_at) => DateTime.t(),
+          required(:cache) => map(),
+          required(:api) => map(),
+          required(:handler) => map(),
+          required(:rate_limiter) => map(),
+          required(:tier) => map(),
+          required(:connection) => map(),
+          required(:health) => map(),
+          required(:ack) => map()
+        }
+
   handle_event "app_mention", event, ctx do
     respond(
       event["channel"],
@@ -553,7 +574,25 @@ defmodule BasicBot do
     """
   end
 
-  @doc false
+  @doc """
+  Turns a telemetry snapshot into ready-to-send Block Kit sections.
+
+  The helper emits a consistent four-section layout (cache, handlers/API,
+  limiters, connection/health) so example bots can reuse the same template for
+  both live telemetry (`TelemetryStats`) and fallback probe snapshots.
+
+  ## Examples
+
+      iex> snapshot = %{source: :telemetry_stats, generated_at: DateTime.utc_now(), cache: %{users: 10, channels: 2, last_sync_kind: :channels, last_sync_status: :ok, last_sync_count: 12, last_sync_duration_ms: 1200}, api: %{total: 5, ok: 5, error: 0, exception: 0, unknown: 0, avg_duration_ms: 12.3, rate_limited: 0, last_method: "chat.postMessage", last_rate_limited: nil}, handler: %{available?: true, status: %{ok: 5}, duration_ms: 10, ingress: %{queue: 0, duplicate: 0}, middleware_halts: 0}, rate_limiter: %{allow: 5, queue: 0, drains: 0, last_queue: 0, last_block_delay_ms: nil}, tier: %{allow: 5, queue: 0, last_tokens: 1.0, suspensions: 0, resumes: 0, last_suspend: nil, last_resume: nil}, connection: %{states: %{connected: 1}, last_state: :connected, rate_limited: 0, last_rate_delay_ms: nil}, health: %{statuses: %{ok: 1}, last_status: %{status: :ok, duration_ms: 50, reason: nil}, disabled?: false, failures: 0}, ack: %{ok: 1, error: 0, exception: 0, unknown: 0}}
+      iex> snapshot |> BasicBot.telemetry_blocks()
+      [%{"type" => "section", "text" => %{"type" => "mrkdwn", "text" => "*Runtime telemetry snapshot*"}, "fields" => [...]}, ...]
+
+  ## Return value
+
+  Returns a list of Slack Block Kit maps ready to be passed to `SlackBot.Blocks`
+  helpers or directly to `chat.postMessage`.
+  """
+  @spec telemetry_blocks(telemetry_snapshot() | map()) :: [map()]
   def telemetry_blocks(%{source: source} = snapshot) do
     [
       SlackBot.Blocks.section("*Runtime telemetry snapshot*"),

@@ -65,6 +65,24 @@ defmodule BasicBot.Application do
   """
   use Application
 
+  @doc """
+  Boots the BasicBot supervision tree.
+
+  The application supervises a single `BasicBot.SlackBot` child using
+  `:one_for_one`, mirroring the minimum setup most real bots start with.
+
+  ## Return value
+
+  The return value mirrors `Supervisor.start_link/2`. In typical cases it is
+  `{:ok, pid}`, but the supervisor may also return `{:error, reason}` when the
+  tree fails to start.
+
+  ## Examples
+
+      iex> BasicBot.Application.start(:normal, [])
+      {:ok, #PID<0.200.0>}
+  """
+  @spec start(Application.start_type(), term()) :: Supervisor.on_start()
   def start(_type, _args) do
     children = [
       BasicBot.SlackBot
