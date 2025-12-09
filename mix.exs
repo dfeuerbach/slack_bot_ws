@@ -59,7 +59,8 @@ defmodule SlackBot.MixProject do
       {:redix, "~> 1.2", optional: true},
       {:igniter, "~> 0.6", optional: true},
       {:ex_doc, "~> 0.39.1", only: :dev, runtime: false},
-      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false}
+      {:credo, "~> 1.7", only: :dev, runtime: false},
+      {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false}
     ]
   end
 
