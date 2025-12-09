@@ -22,7 +22,8 @@ defmodule BasicBot.MixProject do
     [
       {:slack_bot_ws, path: "../.."},
       {:telemetry_metrics, "~> 0.6"},
-      {:telemetry_poller, "~> 1.0"}
+      {:telemetry_poller, "~> 1.0"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 end
