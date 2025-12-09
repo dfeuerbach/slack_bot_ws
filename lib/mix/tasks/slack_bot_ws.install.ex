@@ -17,8 +17,7 @@ defmodule Mix.Tasks.SlackBotWs.Install do
 
   # Igniter is an optional dependency; suppress warnings when it is not present.
   @compile {:no_warn_undefined, Igniter}
-  @compile {:no_warn_undefined, Igniter.Project.File}
-  @compile {:no_warn_undefined, Igniter.Project.Supervisor}
+  alias Rewrite.Source
 
   @shortdoc "Scaffolds a SlackBot instance using Igniter when available"
 
@@ -41,7 +40,7 @@ defmodule Mix.Tasks.SlackBotWs.Install do
 
   defp run_with_igniter(app, bot_module) do
     Mix.shell().info("""
-    > Detected Igniter – generating #{inspect(bot_module)} and wiring it into your app.
+    > Detected Igniter - generating #{inspect(bot_module)} and wiring it into your app.
     """)
 
     igniter = Igniter.new()
@@ -53,8 +52,8 @@ defmodule Mix.Tasks.SlackBotWs.Install do
       |> ensure_supervisor_child(app, bot_module)
       |> ensure_agents_doc()
 
-    case Igniter.apply(igniter) do
-      :ok ->
+    case Igniter.do_or_dry_run(igniter, title: "SlackBot installer") do
+      result when result in [:changes_made, :no_changes, :dry_run_with_no_changes] ->
         Mix.shell().info("""
         SlackBot install complete.
 
@@ -70,8 +69,8 @@ defmodule Mix.Tasks.SlackBotWs.Install do
           - Diagnostics:     https://hexdocs.pm/slack_bot_ws/diagnostics.html
         """)
 
-      {:error, reason} ->
-        Mix.shell().error("SlackBot install failed: #{inspect(reason)}")
+      other ->
+        Mix.shell().error("SlackBot install aborted: #{inspect(other)}")
     end
   end
 
@@ -119,7 +118,7 @@ defmodule Mix.Tasks.SlackBotWs.Install do
     end
     """
 
-    Igniter.Project.File.create(igniter, file, contents)
+    Igniter.create_new_file(igniter, file, contents, on_exists: :skip)
   end
 
   defp ensure_config(igniter, app, bot_module) do
@@ -132,14 +131,11 @@ defmodule Mix.Tasks.SlackBotWs.Install do
       bot_token: System.fetch_env!("SLACK_BOT_TOKEN")
     """
 
-    Igniter.Project.File.append_once(igniter, config_file, snippet)
+    append_once(igniter, config_file, snippet)
   end
 
-  defp ensure_supervisor_child(igniter, app, bot_module) do
-    app_module = app |> Atom.to_string() |> Macro.camelize() |> Kernel.<>(".Application")
-    file = "lib/#{app}/application.ex"
-
-    Igniter.Project.Supervisor.add_child(igniter, file, app_module, bot_module)
+  defp ensure_supervisor_child(igniter, _app, bot_module) do
+    Igniter.Project.Application.add_new_child(igniter, bot_module)
   end
 
   defp ensure_agents_doc(igniter) do
@@ -159,12 +155,52 @@ defmodule Mix.Tasks.SlackBotWs.Install do
             "SLACK_BOT_AGENTS.md"
           end
 
-        Igniter.Project.File.append_once(igniter, target, snippet)
+        append_once(igniter, target, snippet)
 
       :error ->
         igniter
     end
   end
+
+  defp append_once(igniter, path, snippet) do
+    trimmed = String.trim(snippet)
+
+    igniter
+    |> Igniter.include_or_create_file(path, "")
+    |> Igniter.update_file(path, &maybe_append(&1, trimmed))
+  end
+
+  defp maybe_append(source, trimmed) do
+    content = Source.get(source, :content)
+
+    content
+    |> contains_snippet?(trimmed)
+    |> maybe_update_source(source, content, trimmed)
+  end
+
+  defp contains_snippet?(content, snippet), do: String.contains?(content, snippet)
+
+  defp maybe_update_source(true, source, _content, _trimmed), do: source
+
+  defp maybe_update_source(false, source, content, trimmed) do
+    new_content = content <> separator_for(content) <> trimmed <> "\n"
+    Source.update(source, :content, new_content)
+  end
+
+  defp separator_for(content) do
+    flags = {
+      String.trim(content) == "",
+      String.ends_with?(content, "\n\n"),
+      String.ends_with?(content, "\n")
+    }
+
+    separator_from_flags(flags)
+  end
+
+  defp separator_from_flags({true, _double, _single}), do: ""
+  defp separator_from_flags({_blank, true, _single}), do: ""
+  defp separator_from_flags({_blank, _double, true}), do: "\n"
+  defp separator_from_flags({_blank, _double, _single}), do: "\n\n"
 
   defp library_agents_content do
     deps_paths = Mix.Project.deps_paths()

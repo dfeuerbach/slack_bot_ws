@@ -61,7 +61,7 @@ end
 | `/deploy api canary env staging env prod` | `%{service: "api", canary?: true, envs: ["staging", "prod"]}` |
 
 See the [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
-
+d
 ### Plug-like middleware pipeline
 
 SlackBot routes events through a Plug-like pipeline. Middleware runs before handlers and can short-circuit with `{:halt, response}`. Multiple `handle_event` clauses for the same type run in declaration order.
