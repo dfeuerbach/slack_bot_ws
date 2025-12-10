@@ -12,6 +12,22 @@ defmodule SlackBot.Cache.Sync.Channels do
   alias SlackBot.Telemetry
 
   @type option :: {:name, GenServer.name()} | {:config_server, GenServer.server()}
+  @type sync_count :: non_neg_integer()
+  @type sync_result ::
+          {:ok, sync_count()}
+          | {:error, term(), sync_count()}
+          | {:rate_limited, pos_integer(), String.t() | nil, sync_count()}
+
+  @type pending_sync :: %{
+          bot_user_id: String.t(),
+          cursor: String.t() | nil,
+          count: sync_count()
+        }
+
+  @type run_sync_result ::
+          {:ok, String.t(), sync_count()}
+          | {:error, term(), String.t() | nil, sync_count()}
+          | {:rate_limited, String.t(), String.t() | nil, sync_count(), pos_integer()}
 
   @spec start_link([option()]) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -22,12 +38,12 @@ defmodule SlackBot.Cache.Sync.Channels do
   @impl true
   def init(opts) do
     config_server = Keyword.fetch!(opts, :config_server)
-    state = %{config_server: config_server, bot_user_id: nil}
+    state = %{config_server: config_server, bot_user_id: nil, pending_sync: nil}
 
     config = ConfigServer.config(config_server)
     cache_sync = config.cache_sync
 
-    if cache_sync.enabled and :channels in cache_sync.kinds do
+    if cache_sync_enabled?(cache_sync) do
       Logger.debug(
         "[SlackBot] channels cache sync scheduling first run interval_ms=#{cache_sync.interval_ms}"
       )
@@ -44,105 +60,133 @@ defmodule SlackBot.Cache.Sync.Channels do
     config = ConfigServer.config(config_server)
     cache_sync = config.cache_sync
 
-    if cache_sync.enabled and :channels in cache_sync.kinds do
-      {_status, bot_user_id} = run_sync(config, cache_sync, state.bot_user_id)
-      schedule_sync(cache_sync.interval_ms)
-      {:noreply, %{state | bot_user_id: bot_user_id}}
-    else
-      {:noreply, state}
+    cond do
+      cache_sync_enabled?(cache_sync) ->
+        case run_sync(config, cache_sync, state.bot_user_id, state.pending_sync) do
+          {:ok, bot_user_id, _count} ->
+            schedule_sync(cache_sync.interval_ms)
+            {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: nil}}
+
+          {:error, _reason, bot_user_id, _count} ->
+            schedule_sync(cache_sync.interval_ms)
+            {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: nil}}
+
+          {:rate_limited, bot_user_id, cursor, count, secs} ->
+            Logger.debug(
+              "[SlackBot] cache sync users.conversations pausing for #{secs}s cursor=#{inspect(cursor)} processed=#{count}"
+            )
+
+            schedule_sync(secs * 1_000)
+
+            pending_sync = %{bot_user_id: bot_user_id, cursor: cursor, count: count}
+            {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: pending_sync}}
+        end
+
+      true ->
+        {:noreply, state}
     end
   end
 
-  defp run_sync(%Config{} = config, cache_sync, bot_user_id) do
-    with {:ok, bot_user_id} <- ensure_bot_user_id(config, bot_user_id) do
-      Logger.debug(
-        "[SlackBot] cache sync users.conversations started for #{inspect(config.instance_name)}"
-      )
+  @spec run_sync(Config.t(), map(), String.t() | nil, pending_sync() | nil) :: run_sync_result()
+  defp run_sync(%Config{} = config, cache_sync, cached_bot_user_id, pending_sync) do
+    resolved =
+      case pending_sync do
+        %{bot_user_id: bot_user_id} -> {:ok, bot_user_id}
+        _ -> resolve_bot_user_id(config, cached_bot_user_id)
+      end
 
-      start = System.monotonic_time()
-      result = do_sync_channels(config, cache_sync, bot_user_id, nil, 0)
-      duration = System.monotonic_time() - start
+    case resolved do
+      {:ok, bot_user_id} ->
+        cursor = pending_sync && pending_sync.cursor
+        count = (pending_sync && pending_sync.count) || 0
 
-      {status, count} =
-        case result do
-          {:ok, count} -> {:ok, count}
-          {:error, _reason, count} -> {:error, count}
-        end
+        run_sync_with_identity(
+          config,
+          cache_sync,
+          bot_user_id,
+          cursor,
+          count,
+          pending_sync != nil
+        )
 
-      Logger.debug(
-        "[SlackBot] cache sync users.conversations completed status=#{inspect(status)} count=#{count}"
-      )
-
-      Telemetry.execute(
-        config,
-        [:cache, :sync],
-        %{duration: duration, count: count},
-        %{kind: :channels, status: status}
-      )
-
-      log_channel_cache_snapshot(config)
-      {:ok, bot_user_id}
-    else
       {:error, reason} ->
         Logger.debug(
           "[SlackBot] cache sync users.conversations skipped: #{inspect(reason)} instance=#{inspect(config.instance_name)}"
         )
 
-        {:error, bot_user_id}
+        {:error, reason, cached_bot_user_id, 0}
     end
   end
 
-  defp do_sync_channels(%Config{} = config, cache_sync, bot_user_id, cursor, count) do
-    body =
-      cache_sync.users_conversations_opts
-      |> Map.put("user", bot_user_id)
-      |> maybe_put_cursor(cursor)
+  defp run_sync_with_identity(config, cache_sync, bot_user_id, cursor, count, resuming?) do
+    log_sync_start(config, resuming?)
 
-    case SlackBot.push(config, {"users.conversations", body}) do
-      {:ok, %{"channels" => channels} = resp} when is_list(channels) ->
-        {channel_map, joined_ids} =
-          Enum.reduce(channels, {%{}, MapSet.new()}, fn channel, {map_acc, joined_acc} ->
-            case channel["id"] do
-              id when is_binary(id) ->
-                {
-                  Map.put(map_acc, id, channel),
-                  MapSet.put(joined_acc, id)
-                }
+    {result, duration} = sync_channels(config, cache_sync, bot_user_id, cursor, count)
 
-              _ ->
-                {map_acc, joined_acc}
-            end
-          end)
+    case result do
+      {:rate_limited, secs, resume_cursor, resume_count} ->
+        {:rate_limited, bot_user_id, resume_cursor, resume_count, secs}
 
-        persist_channels(config, channel_map, joined_ids)
-        new_count = count + map_size(channel_map)
+      _ ->
+        status = sync_status(result)
+        final_count = sync_count(result)
 
-        next_cursor =
-          resp
-          |> Map.get("response_metadata", %{})
-          |> Map.get("next_cursor", "")
-
-        cond do
-          reached_page_limit?(cache_sync.page_limit, new_count) or next_cursor in [nil, ""] ->
-            {:ok, new_count}
-
-          true ->
-            do_sync_channels(
-              config,
-              cache_sync,
-              bot_user_id,
-              next_cursor,
-              new_count
-            )
-        end
-
-      {:error, {:rate_limited, secs}} when is_integer(secs) and secs > 0 ->
         Logger.debug(
-          "[SlackBot] cache sync users.conversations rate limited, retry_after=#{secs}s cursor=#{inspect(cursor)} processed=#{count}"
+          "[SlackBot] cache sync users.conversations completed status=#{inspect(status)} count=#{final_count}"
         )
 
-        :timer.sleep(secs * 1_000)
-        do_sync_channels(config, cache_sync, bot_user_id, cursor, count)
+        Telemetry.execute(
+          config,
+          [:cache, :sync],
+          %{duration: duration, count: final_count},
+          %{kind: :channels, status: status}
+        )
+
+        log_channel_cache_snapshot(config)
+
+        attach_identity(result, bot_user_id)
+    end
+  end
+
+  defp log_sync_start(%Config{} = config, false) do
+    Logger.debug(
+      "[SlackBot] cache sync users.conversations started for #{inspect(config.instance_name)}"
+    )
+  end
+
+  defp log_sync_start(%Config{} = config, true) do
+    Logger.debug(
+      "[SlackBot] cache sync users.conversations resumed for #{inspect(config.instance_name)}"
+    )
+  end
+
+  defp sync_channels(config, cache_sync, bot_user_id, cursor, count) do
+    start = System.monotonic_time()
+    result = do_sync_channels(config, cache_sync, bot_user_id, cursor, count)
+    duration = System.monotonic_time() - start
+
+    {result, duration}
+  end
+
+  @spec do_sync_channels(Config.t(), map(), String.t(), String.t() | nil, sync_count()) ::
+          sync_result()
+  defp do_sync_channels(%Config{} = config, cache_sync, bot_user_id, cursor, count) do
+    case fetch_channels_page(config, cache_sync, bot_user_id, cursor) do
+      {:page, resp, channels} ->
+        processed = persist_page(config, channels)
+        new_count = count + processed
+
+        case pagination_decision(cache_sync, resp, new_count) do
+          :halt ->
+            {:ok, new_count}
+
+          {:cont, next_cursor} ->
+            do_sync_channels(config, cache_sync, bot_user_id, next_cursor, new_count)
+        end
+
+      {:rate_limited, secs} ->
+        log_rate_limit(secs, cursor, count)
+        {:rate_limited, secs, cursor, count}
 
       {:error, reason} ->
         Logger.debug(
@@ -151,13 +195,74 @@ defmodule SlackBot.Cache.Sync.Channels do
 
         {:error, reason, count}
 
-      other ->
+      {:unexpected, other} ->
         Logger.debug(
           "[SlackBot] cache sync users.conversations unexpected_response=#{inspect(other)} processed=#{count}"
         )
 
         {:error, {:invalid_response, other}, count}
     end
+  end
+
+  defp fetch_channels_page(config, cache_sync, bot_user_id, cursor) do
+    body =
+      cache_sync.users_conversations_opts
+      |> Map.put("user", bot_user_id)
+      |> maybe_put_cursor(cursor)
+
+    case SlackBot.push(config, {"users.conversations", body}) do
+      {:ok, %{"channels" => channels} = resp} when is_list(channels) ->
+        {:page, resp, channels}
+
+      {:error, {:rate_limited, secs}} when is_integer(secs) and secs > 0 ->
+        {:rate_limited, secs}
+
+      {:error, reason} ->
+        {:error, reason}
+
+      other ->
+        {:unexpected, other}
+    end
+  end
+
+  defp pagination_decision(cache_sync, resp, count) do
+    next_cursor =
+      resp
+      |> Map.get("response_metadata", %{})
+      |> Map.get("next_cursor", "")
+
+    cond do
+      reached_page_limit?(cache_sync.page_limit, count) -> :halt
+      next_cursor in [nil, ""] -> :halt
+      true -> {:cont, next_cursor}
+    end
+  end
+
+  defp persist_page(config, channels) when is_list(channels) do
+    {channel_map, joined_ids} = index_channels(channels)
+    persist_channels(config, channel_map, joined_ids)
+    map_size(channel_map)
+  end
+
+  defp index_channels(channels) do
+    Enum.reduce(channels, {%{}, MapSet.new()}, fn channel, {map_acc, joined_acc} ->
+      case channel["id"] do
+        id when is_binary(id) ->
+          {
+            Map.put(map_acc, id, channel),
+            MapSet.put(joined_acc, id)
+          }
+
+        _ ->
+          {map_acc, joined_acc}
+      end
+    end)
+  end
+
+  defp log_rate_limit(secs, cursor, count) do
+    Logger.debug(
+      "[SlackBot] cache sync users.conversations rate limited, retry_after=#{secs}s cursor=#{inspect(cursor)} processed=#{count}"
+    )
   end
 
   defp persist_channels(%Config{} = config, channels_by_id, joined_ids) do
@@ -220,20 +325,25 @@ defmodule SlackBot.Cache.Sync.Channels do
 
   defp reached_page_limit?(_, _), do: false
 
-  defp ensure_bot_user_id(%Config{assigns: %{bot_user_id: id}}, _cached_id) when is_binary(id),
-    do: {:ok, id}
+  @spec resolve_bot_user_id(Config.t(), String.t() | nil) ::
+          {:ok, String.t()} | {:error, term()}
+  defp resolve_bot_user_id(%Config{assigns: %{bot_user_id: id}}, _cached_id)
+       when is_binary(id) and id != "",
+       do: {:ok, id}
 
-  defp ensure_bot_user_id(_config, cached_id) when is_binary(cached_id), do: {:ok, cached_id}
+  defp resolve_bot_user_id(_config, cached_id) when is_binary(cached_id) and cached_id != "",
+    do: {:ok, cached_id}
 
-  defp ensure_bot_user_id(%Config{} = config, _cached_id), do: fetch_bot_user_id(config)
+  defp resolve_bot_user_id(%Config{} = config, _cached_id),
+    do: discover_bot_user_id(config)
 
-  defp fetch_bot_user_id(%Config{} = config) do
+  defp discover_bot_user_id(%Config{} = config) do
     Logger.debug(
       "[SlackBot] cache sync users.conversations discovering bot identity for #{inspect(config.instance_name)}"
     )
 
     case SlackBot.push(config, {"auth.test", %{}}) do
-      {:ok, %{"user_id" => user_id}} when is_binary(user_id) ->
+      {:ok, %{"user_id" => user_id}} when is_binary(user_id) and user_id != "" ->
         {:ok, user_id}
 
       {:ok, _} ->
@@ -243,4 +353,21 @@ defmodule SlackBot.Cache.Sync.Channels do
         {:error, {:auth_test_failed, reason}}
     end
   end
+
+  defp cache_sync_enabled?(%{enabled: enabled, kinds: kinds})
+       when is_boolean(enabled) and is_list(kinds),
+       do: enabled and :channels in kinds
+
+  defp cache_sync_enabled?(_), do: false
+
+  defp sync_status({:ok, _count}), do: :ok
+  defp sync_status({:error, _reason, _count}), do: :error
+
+  defp sync_count({:ok, count}), do: count
+  defp sync_count({:error, _reason, count}), do: count
+
+  defp attach_identity({:ok, count}, bot_user_id), do: {:ok, bot_user_id, count}
+
+  defp attach_identity({:error, reason, count}, bot_user_id),
+    do: {:error, reason, bot_user_id, count}
 end

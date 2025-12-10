@@ -260,7 +260,8 @@ defmodule SlackBot do
   - [Slack Web API Reference](https://api.slack.com/methods)
   - [Rate Limiting Guide](https://hexdocs.pm/slack_bot_ws/rate_limiting.html)
   """
-  @spec push(GenServer.server(), {String.t(), map()}) :: {:ok, map()} | {:error, term()}
+  @spec push(Config.t() | GenServer.server(), {String.t(), map()}) ::
+          {:ok, map()} | {:error, term()}
   def push(server \\ __MODULE__, {method, body}) when is_binary(method) and is_map(body) do
     config =
       case server do
