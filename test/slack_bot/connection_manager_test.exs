@@ -2,6 +2,7 @@ defmodule SlackBot.ConnectionManagerTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog
+  import SlackBot.ConnectionTestHelpers
 
   alias SlackBot.Cache
   alias SlackBot.EventBuffer
@@ -9,7 +10,10 @@ defmodule SlackBot.ConnectionManagerTest do
   setup do
     Application.delete_env(:slack_bot_ws, SlackBot)
 
-    instance = ConnectionManagerTest.Instance
+    config_name = unique_name(:cm_config)
+    manager_name = unique_name(:cm_manager)
+    task_sup_name = unique_name(:cm_tasks)
+    instance = Module.concat(__MODULE__, :"Instance#{System.unique_integer([:positive])}")
 
     config_opts = [
       app_token: "xapp-conn",
@@ -23,15 +27,17 @@ defmodule SlackBot.ConnectionManagerTest do
       backoff: %{min_ms: 5, max_ms: 5, max_attempts: :infinity, jitter_ratio: 0.0}
     ]
 
-    {:ok, _} = start_supervised({SlackBot.ConfigServer, name: :cm_config, config: config_opts})
-    config = SlackBot.ConfigServer.config(:cm_config)
+    {:ok, _} =
+      start_supervised({SlackBot.ConfigServer, name: config_name, config: config_opts})
+
+    config = SlackBot.ConfigServer.config(config_name)
 
     Cache.child_specs(config)
     |> Enum.each(&start_supervised!(&1))
 
     start_supervised!(EventBuffer.child_spec(config))
 
-    {:ok, _} = start_supervised({Task.Supervisor, name: :cm_tasks})
+    {:ok, _} = start_supervised({Task.Supervisor, name: task_sup_name})
 
     parent = self()
 
@@ -39,11 +45,15 @@ defmodule SlackBot.ConnectionManagerTest do
       {:ok, _pid} =
         start_supervised(
           {SlackBot.ConnectionManager,
-           name: :cm_manager, config_server: :cm_config, task_supervisor: :cm_tasks}
+           name: manager_name, config_server: config_name, task_supervisor: task_sup_name}
         )
 
       assert_receive {:test_transport, transport_pid}
-      send(parent, {:cm_context, %{transport: transport_pid, config: config}})
+
+      send(
+        parent,
+        {:cm_context, %{transport: transport_pid, config: config, manager: manager_name}}
+      )
     end)
 
     receive do
@@ -102,19 +112,20 @@ defmodule SlackBot.ConnectionManagerTest do
     capture_log(fn ->
       SlackBot.TestTransport.disconnect(transport_pid, %{"reason" => "refresh"})
 
-      assert_receive {:test_transport, new_pid}
+      new_pid = assert_transport_restart(transport_pid)
       assert is_pid(new_pid)
       refute new_pid == transport_pid
     end)
   end
 
-  test "reconnects when a healthcheck failure is reported", %{transport: transport_pid} do
-    manager = :cm_manager
-
+  test "reconnects when a healthcheck failure is reported", %{
+    transport: transport_pid,
+    manager: manager
+  } do
     capture_log(fn ->
       send(manager, {:slackbot, :healthcheck_failed, :econnrefused})
 
-      assert_receive {:test_transport, new_pid}
+      new_pid = assert_transport_restart(transport_pid)
       assert is_pid(new_pid)
       refute new_pid == transport_pid
     end)

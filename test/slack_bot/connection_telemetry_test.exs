@@ -2,6 +2,7 @@ defmodule SlackBot.ConnectionTelemetryTest do
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog
+  import SlackBot.ConnectionTestHelpers
 
   alias SlackBot.Cache
   alias SlackBot.EventBuffer
@@ -9,7 +10,9 @@ defmodule SlackBot.ConnectionTelemetryTest do
   setup do
     Application.delete_env(:slack_bot_ws, SlackBot)
 
-    instance = __MODULE__.Instance
+    config_name = unique_name(:ct_config)
+    task_sup_name = unique_name(:ct_tasks)
+    instance = Module.concat(__MODULE__, :"Instance#{System.unique_integer([:positive])}")
 
     config_opts = [
       app_token: "xapp-telemetry",
@@ -22,19 +25,24 @@ defmodule SlackBot.ConnectionTelemetryTest do
       instance_name: instance
     ]
 
-    {:ok, _} = start_supervised({SlackBot.ConfigServer, name: :ct_config, config: config_opts})
-    config = SlackBot.ConfigServer.config(:ct_config)
+    {:ok, _} =
+      start_supervised({SlackBot.ConfigServer, name: config_name, config: config_opts})
+
+    config = SlackBot.ConfigServer.config(config_name)
 
     Cache.child_specs(config)
     |> Enum.each(&start_supervised!(&1))
 
     start_supervised!(EventBuffer.child_spec(config))
-    {:ok, _} = start_supervised({Task.Supervisor, name: :ct_tasks})
+    {:ok, _} = start_supervised({Task.Supervisor, name: task_sup_name})
 
-    {:ok, %{config: config}}
+    {:ok, %{config: config, config_name: config_name, task_sup: task_sup_name}}
   end
 
-  test "emits telemetry on connect and disconnect", %{config: _config} do
+  test "emits telemetry on connect and disconnect", %{
+    config_name: config_name,
+    task_sup: task_sup_name
+  } do
     parent = self()
     handler_id = {:conn_state, make_ref()}
 
@@ -53,22 +61,26 @@ defmodule SlackBot.ConnectionTelemetryTest do
       {:ok, _pid} =
         start_supervised(
           {SlackBot.ConnectionManager,
-           name: :ct_manager, config_server: :ct_config, task_supervisor: :ct_tasks}
+           name: unique_name(:ct_manager),
+           config_server: config_name,
+           task_supervisor: task_sup_name}
         )
 
       assert_receive {:test_transport, transport_pid}
 
-      assert_receive {:telemetry_event, [:slackbot, :connection, :state], %{count: 1},
-                      %{state: :connected}}
+      _ = assert_conn_state(:connected)
 
       SlackBot.TestTransport.disconnect(transport_pid, %{"reason" => "refresh"})
 
-      assert_receive {:telemetry_event, [:slackbot, :connection, :state], %{count: 1},
-                      %{state: :disconnect, reason: %{"reason" => "refresh"}}}
+      {_measurements, metadata} = assert_conn_state(:disconnect)
+      assert metadata[:reason] == %{"reason" => "refresh"}
     end)
   end
 
-  test "emits handler ingress telemetry for queued and duplicate envelopes", %{config: _config} do
+  test "emits handler ingress telemetry for queued and duplicate envelopes", %{
+    config_name: config_name,
+    task_sup: task_sup_name
+  } do
     parent = self()
     handler_id = {:handler_ingress, make_ref()}
 
@@ -86,7 +98,9 @@ defmodule SlackBot.ConnectionTelemetryTest do
     {:ok, _pid} =
       start_supervised(
         {SlackBot.ConnectionManager,
-         name: :ct_ingress_manager, config_server: :ct_config, task_supervisor: :ct_tasks}
+         name: unique_name(:ct_ingress_manager),
+         config_server: config_name,
+         task_supervisor: task_sup_name}
       )
 
     assert_receive {:test_transport, transport_pid}
@@ -106,7 +120,10 @@ defmodule SlackBot.ConnectionTelemetryTest do
                     %{decision: :duplicate, envelope_id: "ENV-1", type: "message"}}
   end
 
-  test "annotates handler spans with envelope ids and statuses", %{config: _config} do
+  test "annotates handler spans with envelope ids and statuses", %{
+    config_name: config_name,
+    task_sup: task_sup_name
+  } do
     parent = self()
     handler_id = {:handler_span, make_ref()}
 
@@ -124,7 +141,9 @@ defmodule SlackBot.ConnectionTelemetryTest do
     {:ok, _pid} =
       start_supervised(
         {SlackBot.ConnectionManager,
-         name: :ct_span_manager, config_server: :ct_config, task_supervisor: :ct_tasks}
+         name: unique_name(:ct_span_manager),
+         config_server: config_name,
+         task_supervisor: task_sup_name}
       )
 
     assert_receive {:test_transport, transport_pid}
