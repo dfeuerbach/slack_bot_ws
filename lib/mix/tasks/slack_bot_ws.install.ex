@@ -16,7 +16,7 @@ defmodule Mix.Tasks.SlackBotWs.Install do
   use Mix.Task
 
   # Igniter is an optional dependency; suppress warnings when it is not present.
-  @compile {:no_warn_undefined, Igniter}
+  @compile {:no_warn_undefined, [Igniter, Igniter.Project.Application, Rewrite.Source]}
   alias Rewrite.Source
 
   @shortdoc "Scaffolds a SlackBot instance using Igniter when available"
