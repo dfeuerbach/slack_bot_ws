@@ -705,13 +705,23 @@ defmodule BasicBot do
     last_method = Map.get(api, :last_method)
 
     [
-      avg && "Avg #{avg}",
-      rate_hits > 0 && "#{rate_hits} rate-limit hits",
-      last_method && "Last method #{last_method}"
+      "Avg #{avg}",
+      maybe_rate_hits(rate_hits),
+      maybe_last_method(last_method)
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join(" • ")
   end
+
+  defp maybe_rate_hits(rate_hits) when is_integer(rate_hits) and rate_hits > 0,
+    do: "#{rate_hits} rate-limit hits"
+
+  defp maybe_rate_hits(_), do: nil
+
+  defp maybe_last_method(method) when is_binary(method) and method != "",
+    do: "Last method #{method}"
+
+  defp maybe_last_method(_), do: nil
 
   defp format_handler_status(%{available?: false}),
     do: "Enable `telemetry_stats` to see handler outcomes"
