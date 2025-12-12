@@ -393,8 +393,7 @@ defmodule SlackBot.RateLimiter do
     end
   end
 
-  defp normalize_int(:unknown), do: 0
-  defp normalize_int(value) when is_integer(value), do: value
+  defp normalize_int(value) when is_integer(value) and value >= 0, do: value
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 end
