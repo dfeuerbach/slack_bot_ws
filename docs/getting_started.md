@@ -4,7 +4,7 @@ This guide walks you through creating a Slack bot from scratch—configuring a S
 
 ## Prerequisites
 
-- Elixir 1.14 or later
+- Elixir 1.17 or later
 - A Slack workspace where you have permission to install apps
 - Access to [api.slack.com](https://api.slack.com/apps)
 

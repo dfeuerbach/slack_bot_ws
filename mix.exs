@@ -5,7 +5,7 @@ defmodule SlackBot.MixProject do
     [
       app: :slack_bot_ws,
       version: "0.1.0-rc.1",
-      elixir: "~> 1.14",
+      elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/dfeuerbach/slack_bot_ws",
@@ -59,11 +59,11 @@ defmodule SlackBot.MixProject do
     [
       {:finch, "~> 0.20"},
       {:websockex, "~> 0.4"},
-      {:req, "~> 0.4"},
+      {:req, "~> 0.5"},
       {:jason, "~> 1.4"},
       {:nimble_parsec, "~> 1.4"},
       {:redix, "~> 1.2", optional: true},
-      {:igniter, "~> 0.6", optional: true},
+      {:igniter, "~> 0.7", optional: true},
       {:ex_doc, "~> 0.39.1", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: :dev, runtime: false},
       {:sobelow, "~> 0.14", only: [:dev, :test], runtime: false}
