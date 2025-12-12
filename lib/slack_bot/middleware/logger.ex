@@ -60,7 +60,7 @@ defmodule SlackBot.Middleware.Logger do
   ## See Also
 
   - The event routing DSL (`handle_event`, `slash`, `middleware` macros)
-  - `BasicBot` - Example using middleware for logging
+  - Example app: `examples/basic_bot/`
   """
 
   require Logger

@@ -92,7 +92,7 @@ defmodule SlackBot.Diagnostics do
 
   - [Diagnostics Guide](https://hexdocs.pm/slack_bot_ws/diagnostics.html)
   - `SlackBot.TelemetryStats` - For aggregated metrics without payload retention
-  - `BasicBot` - Example demonstrating diagnostics capture
+  - Example app: `examples/basic_bot/`
   """
 
   alias SlackBot.Config

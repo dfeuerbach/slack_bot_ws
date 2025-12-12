@@ -55,7 +55,7 @@ defmodule SlackBot.Command do
 
   - [Slash Grammar Guide](https://hexdocs.pm/slack_bot_ws/slash_grammar.html)
   - The `slash/2` macro for defining command grammars
-  - `BasicBot` - Example demonstrating complex grammar patterns
+  - Example app: `examples/basic_bot/`
   """
 
   import NimbleParsec
