@@ -27,7 +27,7 @@ on:
       - "LICENSE"
 
 concurrency:
-  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == "refs/heads/master" && github.sha || ""}}
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || ''}}
   cancel-in-progress: true
 
 env:
@@ -65,7 +65,7 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles("mix.lock") }}
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
 
@@ -100,7 +100,7 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-quality-1.19-28-${{ hashFiles("mix.lock") }}
+          key: ${{ runner.os }}-mix-quality-1.19-28-${{ hashFiles('mix.lock') }}
           restore-keys: |
             ${{ runner.os }}-mix-quality-1.19-28-
 
