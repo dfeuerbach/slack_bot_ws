@@ -97,8 +97,10 @@ defmodule SlackBot.Blocks do
 
   @doc """
   Returns true when BlockBox is both configured and loaded.
+
+  Accepts either a bot server (pid/name) or the bot's `%SlackBot.Config{}`.
   """
-  @spec blockbox?(GenServer.server()) :: boolean()
+  @spec blockbox?(GenServer.server() | SlackBot.Config.t()) :: boolean()
   def blockbox?(%SlackBot.Config{} = config) do
     config.block_builder != :none and blockbox_loaded?()
   end
