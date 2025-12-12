@@ -155,31 +155,38 @@ defmodule SlackBot.ConnectionTelemetryTest do
     assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
                     %{status: :ok, envelope_id: "ok-env", type: "message"}}
 
-    SlackBot.TestTransport.emit(
-      transport_pid,
-      "message",
-      %{"text" => "err", "handler_error" => true},
-      %{"envelope_id" => "err-env"}
-    )
+    capture_log(fn ->
+      SlackBot.TestTransport.emit(
+        transport_pid,
+        "message",
+        %{"text" => "err", "handler_error" => true},
+        %{"envelope_id" => "err-env"}
+      )
 
-    assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                    %{status: :error, envelope_id: "err-env", type: "message"}}
+      assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
+                      %{status: :error, envelope_id: "err-env", type: "message"}}
 
-    SlackBot.TestTransport.emit(
-      transport_pid,
-      "message",
-      %{"text" => "halt", "handler_halt" => true},
-      %{"envelope_id" => "halt-env"}
-    )
+      SlackBot.TestTransport.emit(
+        transport_pid,
+        "message",
+        %{"text" => "halt", "handler_halt" => true},
+        %{"envelope_id" => "halt-env"}
+      )
 
-    assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                    %{status: :halted, envelope_id: "halt-env", type: "message"}}
+      assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
+                      %{status: :halted, envelope_id: "halt-env", type: "message"}}
 
-    SlackBot.TestTransport.emit(transport_pid, "message", %{"text" => "boom", "raise" => true}, %{
-      "envelope_id" => "exc-env"
-    })
+      SlackBot.TestTransport.emit(
+        transport_pid,
+        "message",
+        %{"text" => "boom", "raise" => true},
+        %{
+          "envelope_id" => "exc-env"
+        }
+      )
 
-    assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                    %{status: :exception, envelope_id: "exc-env", type: "message"}}
+      assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
+                      %{status: :exception, envelope_id: "exc-env", type: "message"}}
+    end)
   end
 end

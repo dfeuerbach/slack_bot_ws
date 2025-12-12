@@ -107,7 +107,7 @@ defmodule SlackBot do
   - [Rate Limiting Guide](https://hexdocs.pm/slack_bot_ws/rate_limiting.html)
   - [Slash Grammar Guide](https://hexdocs.pm/slack_bot_ws/slash_grammar.html)
   - [Telemetry Dashboard](https://hexdocs.pm/slack_bot_ws/telemetry_dashboard.html)
-  - `BasicBot` - Complete working example
+  - Example app: `examples/basic_bot/`
   """
 
   alias SlackBot.Cache

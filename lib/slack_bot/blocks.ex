@@ -72,7 +72,7 @@ defmodule SlackBot.Blocks do
 
   - [Block Kit documentation](https://api.slack.com/block-kit) - Official Slack guide
   - [BlockBox on Hex](https://hex.pm/packages/blockbox) - Elixir Block Kit DSL
-  - `BasicBot` - Example bot using Block Kit with these helpers
+  - Example app: `examples/basic_bot/`
   """
 
   require Logger

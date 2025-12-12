@@ -115,7 +115,7 @@ defmodule SlackBot.TestTransport do
   ## See Also
 
   - `SlackBot.TestHTTP` - Stub HTTP client for API calls
-  - `BasicBot` tests for complete examples
+  - Example app: `examples/basic_bot/`
   """
 
   use GenServer

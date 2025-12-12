@@ -70,7 +70,7 @@ defmodule SlackBot.TelemetryStats do
 
   - [Telemetry Guide](https://hexdocs.pm/slack_bot_ws/telemetry_dashboard.html)
   - `SlackBot.Diagnostics` - For payload capture and replay
-  - `BasicBot` - Example using telemetry snapshots in slash commands
+  - Example app: `examples/basic_bot/`
   """
 
   use GenServer
