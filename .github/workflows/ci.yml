@@ -4,30 +4,30 @@ on:
   push:
     branches: [master]
     paths-ignore:
-      - '**/*.md'
-      - '**/*.png'
-      - '**/*.pxd'
-      - '.formatter.exs'
-      - '.gitignore'
-      - '.credo.exs'
-      - '.sobelow-conf'
-      - 'LICENSE'
+      - "**/*.md"
+      - "**/*.png"
+      - "**/*.pxd"
+      - ".formatter.exs"
+      - ".gitignore"
+      - ".credo.exs"
+      - ".sobelow-conf"
+      - "LICENSE"
   pull_request:
     types: [opened, synchronize, reopened]
     branches-ignore:
       - "**/graphite-base/**"
     paths-ignore:
-      - '**/*.md'
-      - '**/*.png'
-      - '**/*.pxd'
-      - '.formatter.exs'
-      - '.gitignore'
-      - '.credo.exs'
-      - '.sobelow-conf'
-      - 'LICENSE'
+      - "**/*.md"
+      - "**/*.png"
+      - "**/*.pxd"
+      - ".formatter.exs"
+      - ".gitignore"
+      - ".credo.exs"
+      - ".sobelow-conf"
+      - "LICENSE"
 
 concurrency:
-  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == 'refs/heads/master' && github.sha || ''}}
+  group: ${{ github.repository }}-${{ github.workflow }}-${{ github.ref }}-${{ github.ref == "refs/heads/master" && github.sha || ""}}
   cancel-in-progress: true
 
 env:
@@ -43,9 +43,6 @@ jobs:
       matrix:
         include:
           # Minimum supported
-          - elixir: "1.14"
-            otp: "24"
-          # Middle ground - widely deployed
           - elixir: "1.17"
             otp: "27"
           # Latest stable
@@ -61,14 +58,25 @@ jobs:
         with:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
-          cache: mix
-          cache-key: mix-${{ matrix.elixir }}-${{ matrix.otp }}
+
+      - name: Cache deps and _build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles("mix.lock") }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ matrix.elixir }}-${{ matrix.otp }}-
 
       - name: Install dependencies
         run: mix deps.get
 
-      - name: Compile (warnings as errors) and run tests
-        run: mix do compile --warnings-as-errors, test
+      - name: Compile (warnings as errors)
+        run: mix compile --warnings-as-errors
+
+      - name: Run tests
+        run: mix test
 
   quality:
     name: Code Quality
@@ -85,8 +93,16 @@ jobs:
         with:
           elixir-version: "1.19"
           otp-version: "28"
-          cache: mix
-          cache-key: mix-quality
+
+      - name: Cache deps and _build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-quality-1.19-28-${{ hashFiles("mix.lock") }}
+          restore-keys: |
+            ${{ runner.os }}-mix-quality-1.19-28-
 
       - name: Install dependencies
         run: mix deps.get --only dev
@@ -105,4 +121,3 @@ jobs:
 
       - name: Generate docs (verify no warnings)
         run: mix docs
-
