@@ -152,8 +152,7 @@ defmodule SlackBot.ConnectionTelemetryTest do
       "envelope_id" => "ok-env"
     })
 
-    assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                    %{status: :ok, envelope_id: "ok-env", type: "message"}}
+    assert_handler_stop(:ok, "ok-env")
 
     capture_log(fn ->
       SlackBot.TestTransport.emit(
@@ -163,8 +162,7 @@ defmodule SlackBot.ConnectionTelemetryTest do
         %{"envelope_id" => "err-env"}
       )
 
-      assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                      %{status: :error, envelope_id: "err-env", type: "message"}}
+      assert_handler_stop(:error, "err-env")
 
       SlackBot.TestTransport.emit(
         transport_pid,
@@ -173,8 +171,7 @@ defmodule SlackBot.ConnectionTelemetryTest do
         %{"envelope_id" => "halt-env"}
       )
 
-      assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                      %{status: :halted, envelope_id: "halt-env", type: "message"}}
+      assert_handler_stop(:halted, "halt-env")
 
       SlackBot.TestTransport.emit(
         transport_pid,
@@ -185,8 +182,30 @@ defmodule SlackBot.ConnectionTelemetryTest do
         }
       )
 
-      assert_receive {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
-                      %{status: :exception, envelope_id: "exc-env", type: "message"}}
+      assert_handler_stop(:exception, "exc-env")
     end)
+  end
+
+  defp assert_handler_stop(status, envelope_id, type \\ "message", timeout \\ 1_000) do
+    deadline = System.monotonic_time(:millisecond) + timeout
+    wait_for_handler_stop(deadline, status, envelope_id, type)
+  end
+
+  defp wait_for_handler_stop(deadline, status, envelope_id, type) do
+    remaining = max(deadline - System.monotonic_time(:millisecond), 0)
+
+    receive do
+      {:telemetry_event, [:slackbot, :handler, :dispatch, :stop], %{duration: _},
+       %{status: ^status, envelope_id: ^envelope_id, type: ^type}} = event ->
+        event
+
+      _other ->
+        wait_for_handler_stop(deadline, status, envelope_id, type)
+    after
+      remaining ->
+        flunk("""
+        expected handler stop telemetry with status=#{inspect(status)} envelope_id=#{inspect(envelope_id)} type=#{inspect(type)}
+        """)
+    end
   end
 end

@@ -298,12 +298,10 @@ defmodule SlackBot.RateLimiter do
         Map.get(body, "channel_id") ||
         Map.get(body, :channel_id)
 
-    cond do
-      method in @channel_methods and is_binary(channel) ->
-        {:channel, channel}
-
-      true ->
-        :workspace
+    if method in @channel_methods and is_binary(channel) do
+      {:channel, channel}
+    else
+      :workspace
     end
   end
 
@@ -393,8 +391,7 @@ defmodule SlackBot.RateLimiter do
     end
   end
 
-  defp normalize_int(:unknown), do: 0
-  defp normalize_int(value) when is_integer(value), do: value
+  defp normalize_int(value) when is_integer(value) and value >= 0, do: value
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 end

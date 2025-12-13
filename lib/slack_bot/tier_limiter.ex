@@ -324,16 +324,14 @@ defmodule SlackBot.TierLimiter do
   end
 
   defp initial_tokens(capacity, ratio) do
-    ratio =
-      cond do
-        is_number(ratio) and ratio >= 0 -> ratio
-        true -> 0.0
-      end
-
+    ratio = normalize_ratio(ratio)
     tokens = capacity * ratio
     tokens = min(tokens, capacity)
     max(tokens, 0.0)
   end
+
+  defp normalize_ratio(ratio) when is_number(ratio) and ratio >= 0, do: ratio
+  defp normalize_ratio(_), do: 0.0
 
   defp suspend_bucket(bucket, now, delay_ms, method) do
     resume_at = now + delay_ms

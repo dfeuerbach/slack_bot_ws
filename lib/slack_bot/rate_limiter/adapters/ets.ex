@@ -14,7 +14,7 @@ defmodule SlackBot.RateLimiter.Adapters.ETS do
         :undefined ->
           :ets.new(name, [:set, :named_table, :public, read_concurrency: true])
 
-        tid when is_reference(tid) ->
+        tid ->
           tid
       end
 
