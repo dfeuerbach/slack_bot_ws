@@ -60,30 +60,28 @@ defmodule SlackBot.Cache.Sync.Channels do
     config = ConfigServer.config(config_server)
     cache_sync = config.cache_sync
 
-    cond do
-      cache_sync_enabled?(cache_sync) ->
-        case run_sync(config, cache_sync, state.bot_user_id, state.pending_sync) do
-          {:ok, bot_user_id, _count} ->
-            schedule_sync(cache_sync.interval_ms)
-            {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: nil}}
+    if cache_sync_enabled?(cache_sync) do
+      case run_sync(config, cache_sync, state.bot_user_id, state.pending_sync) do
+        {:ok, bot_user_id, _count} ->
+          schedule_sync(cache_sync.interval_ms)
+          {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: nil}}
 
-          {:error, _reason, bot_user_id, _count} ->
-            schedule_sync(cache_sync.interval_ms)
-            {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: nil}}
+        {:error, _reason, bot_user_id, _count} ->
+          schedule_sync(cache_sync.interval_ms)
+          {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: nil}}
 
-          {:rate_limited, bot_user_id, cursor, count, secs} ->
-            Logger.debug(
-              "[SlackBot] cache sync users.conversations pausing for #{secs}s cursor=#{inspect(cursor)} processed=#{count}"
-            )
+        {:rate_limited, bot_user_id, cursor, count, secs} ->
+          Logger.debug(
+            "[SlackBot] cache sync users.conversations pausing for #{secs}s cursor=#{inspect(cursor)} processed=#{count}"
+          )
 
-            schedule_sync(secs * 1_000)
+          schedule_sync(secs * 1_000)
 
-            pending_sync = %{bot_user_id: bot_user_id, cursor: cursor, count: count}
-            {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: pending_sync}}
-        end
-
-      true ->
-        {:noreply, state}
+          pending_sync = %{bot_user_id: bot_user_id, cursor: cursor, count: count}
+          {:noreply, %{state | bot_user_id: bot_user_id, pending_sync: pending_sync}}
+      end
+    else
+      {:noreply, state}
     end
   end
 

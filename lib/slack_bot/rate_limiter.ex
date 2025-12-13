@@ -298,12 +298,10 @@ defmodule SlackBot.RateLimiter do
         Map.get(body, "channel_id") ||
         Map.get(body, :channel_id)
 
-    cond do
-      method in @channel_methods and is_binary(channel) ->
-        {:channel, channel}
-
-      true ->
-        :workspace
+    if method in @channel_methods and is_binary(channel) do
+      {:channel, channel}
+    else
+      :workspace
     end
   end
 

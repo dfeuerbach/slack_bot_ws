@@ -212,33 +212,34 @@ defmodule SlackBot.Router do
     @callback __slackbot_middlewares__() :: list()
   end
 
+  def dispatch(module, "slash_commands", payload, ctx) do
+    handlers = module.__slackbot_handlers__()
+    middlewares = module.__slackbot_middlewares__()
+
+    case find_slash_handler(handlers, payload) do
+      nil ->
+        Logger.debug(
+          "[SlackBot.Router] no slash handler for command=#{inspect(payload["command"])}"
+        )
+
+        :ok
+
+      {:slash_dsl, command, fun, grammar, opts} ->
+        Logger.debug(
+          "[SlackBot.Router] dispatching slash command=#{command} payload=#{inspect(payload)}"
+        )
+
+        handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
+    end
+  end
+
   def dispatch(module, type, payload, ctx) do
     handlers = module.__slackbot_handlers__()
     middlewares = module.__slackbot_middlewares__()
 
-    cond do
-      type == "slash_commands" ->
-        case find_slash_handler(handlers, payload) do
-          nil ->
-            Logger.debug(
-              "[SlackBot.Router] no slash handler for command=#{inspect(payload["command"])}"
-            )
-
-            :ok
-
-          {:slash_dsl, command, fun, grammar, opts} ->
-            Logger.debug(
-              "[SlackBot.Router] dispatching slash command=#{command} payload=#{inspect(payload)}"
-            )
-
-            handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares)
-        end
-
-      true ->
-        handlers
-        |> Enum.filter(&match_event?(&1, type))
-        |> run_event_handlers(module, middlewares, type, payload, ctx)
-    end
+    handlers
+    |> Enum.filter(&match_event?(&1, type))
+    |> run_event_handlers(module, middlewares, type, payload, ctx)
   end
 
   defp find_slash_handler(handlers, payload) do
@@ -413,36 +414,29 @@ defmodule SlackBot.Router do
   end
 
   defp handle_dsl_command(module, fun, command, grammar, opts, payload, ctx, middlewares) do
-    case payload_command(payload) do
-      ^command ->
-        text = (payload["text"] || "") |> String.trim()
+    with ^command <- payload_command(payload),
+         text <- String.trim(payload["text"] || ""),
+         %{tokens: tokens} <- SlackBot.Command.lex(text),
+         {:ok, parsed} <- SlackBot.CommandGrammar.match(grammar, tokens) do
+      enriched = Map.put(parsed, :command, command)
+      runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
+      ack_mode = resolve_ack_mode(opts, ctx)
+      maybe_ack(ack_mode, payload, ctx)
 
-        with %{tokens: tokens} <- SlackBot.Command.lex(text),
-             {:ok, parsed} <- SlackBot.CommandGrammar.match(grammar, tokens) do
-          enriched = Map.put(parsed, :command, command)
-          runner = fn payload, ctx -> apply(module, fun, [payload, ctx]) end
-          ack_mode = resolve_ack_mode(opts, ctx)
-          maybe_ack(ack_mode, payload, ctx)
-
-          case run_middlewares(
-                 middlewares,
-                 "slash_commands",
-                 Map.put(payload, "parsed", enriched),
-                 ctx,
-                 runner
-               ) do
-            {:halt, response} -> {:halt, response}
-            {:cont, result} -> result
-          end
-        else
-          {:error, reason} ->
-            Logger.warning("[SlackBot] slash DSL parse error: #{inspect(reason)}")
-            :ok
-
-          _ ->
-            Logger.warning("[SlackBot] unable to lex slash command input")
-            :ok
-        end
+      case run_middlewares(
+             middlewares,
+             "slash_commands",
+             Map.put(payload, "parsed", enriched),
+             ctx,
+             runner
+           ) do
+        {:halt, response} -> {:halt, response}
+        {:cont, result} -> result
+      end
+    else
+      {:error, reason} ->
+        Logger.warning("[SlackBot] slash DSL parse error: #{inspect(reason)}")
+        :ok
 
       _ ->
         :ok

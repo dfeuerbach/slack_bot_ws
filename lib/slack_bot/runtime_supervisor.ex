@@ -76,22 +76,22 @@ defmodule SlackBot.RuntimeSupervisor do
        ),
        do: []
 
-  defp cache_sync_child_specs(%SlackBot.Config{cache_sync: cache_sync}, base_name, config_server) do
-    if cache_sync.enabled do
-      name = Module.concat(base_name, CacheSyncSupervisor)
+  defp cache_sync_child_specs(
+         %SlackBot.Config{cache_sync: %{enabled: true}} = _config,
+         base_name,
+         config_server
+       ) do
+    name = Module.concat(base_name, CacheSyncSupervisor)
 
-      [
-        %{
-          id: name,
-          start:
-            {SlackBot.Cache.Sync, :start_link,
-             [[name: name, config_server: config_server, base_name: base_name]]},
-          type: :supervisor
-        }
-      ]
-    else
-      []
-    end
+    [
+      %{
+        id: name,
+        start:
+          {SlackBot.Cache.Sync, :start_link,
+           [[name: name, config_server: config_server, base_name: base_name]]},
+        type: :supervisor
+      }
+    ]
   end
 
   defp telemetry_stats_child_specs(%SlackBot.Config{telemetry_stats: %{enabled: true}} = config) do
