@@ -12,6 +12,11 @@ defmodule SlackBot.Cache.Sync.Users do
   alias SlackBot.Telemetry
 
   @type option :: {:name, GenServer.name()} | {:config_server, GenServer.server()}
+  @type sync_count :: non_neg_integer()
+  @type pending_sync :: %{
+          cursor: String.t() | nil,
+          count: sync_count()
+        }
 
   @spec start_link([option()]) :: GenServer.on_start()
   def start_link(opts \\ []) do
@@ -22,7 +27,7 @@ defmodule SlackBot.Cache.Sync.Users do
   @impl true
   def init(opts) do
     config_server = Keyword.fetch!(opts, :config_server)
-    state = %{config_server: config_server}
+    state = %{config_server: config_server, pending_sync: nil}
 
     config = ConfigServer.config(config_server)
     cache_sync = config.cache_sync
@@ -40,44 +45,79 @@ defmodule SlackBot.Cache.Sync.Users do
   end
 
   @impl true
-  def handle_info(:sync, %{config_server: config_server} = state) do
+  def handle_info(:sync, %{config_server: config_server, pending_sync: pending_sync} = state) do
     config = ConfigServer.config(config_server)
     cache_sync = config.cache_sync
 
     if cache_sync.enabled and :users in cache_sync.kinds do
-      run_sync(config, cache_sync)
-      schedule_sync(cache_sync.interval_ms)
-      {:noreply, state}
+      case run_sync(config, cache_sync, pending_sync) do
+        {:ok, _count} ->
+          schedule_sync(cache_sync.interval_ms)
+          {:noreply, %{state | pending_sync: nil}}
+
+        {:error, _reason, _count} ->
+          schedule_sync(cache_sync.interval_ms)
+          {:noreply, %{state | pending_sync: nil}}
+
+        {:rate_limited, secs, cursor, count} ->
+          Logger.debug(
+            "[SlackBot] cache sync users.list pausing for #{secs}s cursor=#{inspect(cursor)} processed=#{count}"
+          )
+
+          schedule_sync(secs * 1_000)
+          {:noreply, %{state | pending_sync: %{cursor: cursor, count: count}}}
+      end
     else
       {:noreply, state}
     end
   end
 
-  defp run_sync(%Config{} = config, cache_sync) do
-    Logger.debug("[SlackBot] cache sync users.list started for #{inspect(config.instance_name)}")
+  defp run_sync(%Config{} = config, cache_sync, pending_sync) do
+    log_sync_start(config, pending_sync != nil)
 
     start = System.monotonic_time()
-    result = do_sync_users(config, cache_sync, nil, 0)
+    cursor = pending_sync && pending_sync.cursor
+    count = (pending_sync && pending_sync.count) || 0
+    result = do_sync_users(config, cache_sync, cursor, count)
     duration = System.monotonic_time() - start
 
     {status, count} =
       case result do
         {:ok, count} -> {:ok, count}
         {:error, _reason, count} -> {:error, count}
+        {:rate_limited, _secs, _cursor, count} -> {:rate_limited, count}
       end
 
-    Logger.debug(
-      "[SlackBot] cache sync users.list completed status=#{inspect(status)} count=#{count}"
-    )
+    if status in [:ok, :error] do
+      Logger.debug(
+        "[SlackBot] cache sync users.list completed status=#{inspect(status)} count=#{count}"
+      )
 
-    Telemetry.execute(
-      config,
-      [:cache, :sync],
-      %{duration: duration, count: count},
-      %{kind: :users, status: status}
-    )
+      Telemetry.execute(
+        config,
+        [:cache, :sync],
+        %{duration: duration, count: count},
+        %{kind: :users, status: status}
+      )
 
-    log_user_cache_snapshot(config)
+      log_user_cache_snapshot(config)
+    end
+
+    attach_duration(result, duration)
+  end
+
+  defp attach_duration({:ok, count}, _duration), do: {:ok, count}
+  defp attach_duration({:error, reason, count}, _duration), do: {:error, reason, count}
+
+  defp attach_duration({:rate_limited, secs, cursor, count}, _duration),
+    do: {:rate_limited, secs, cursor, count}
+
+  defp log_sync_start(%Config{} = config, false) do
+    Logger.debug("[SlackBot] cache sync users.list started for #{inspect(config.instance_name)}")
+  end
+
+  defp log_sync_start(%Config{} = config, true) do
+    Logger.debug("[SlackBot] cache sync users.list resumed for #{inspect(config.instance_name)}")
   end
 
   defp do_sync_users(%Config{} = config, cache_sync, cursor, count) do
@@ -109,12 +149,7 @@ defmodule SlackBot.Cache.Sync.Users do
         end
 
       {:error, {:rate_limited, secs}} when is_integer(secs) and secs > 0 ->
-        Logger.debug(
-          "[SlackBot] cache sync users.list rate limited, retry_after=#{secs}s cursor=#{inspect(cursor)} processed=#{count}"
-        )
-
-        :timer.sleep(secs * 1_000)
-        do_sync_users(config, cache_sync, cursor, count)
+        {:rate_limited, secs, cursor, count}
 
       {:error, reason} ->
         Logger.debug(
