@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Refreshed the README landing narrative to more clearly explain SlackBot’s goals and quick-start path.
-### Changed
 - Simplified the slash command DSL so grammar definitions live directly before `handle/3`, removing the `grammar do ... end` wrapper and updating docs, examples, and tests accordingly.
 ### Fixed
 - Suppressed optional Igniter and Rewrite module warnings in `mix slack_bot_ws.install` when those helper dependencies are not present.
+- Avoid blocking the users cache sync worker during Slack rate limits by scheduling retries instead of sleeping.
 
 ## [0.1.0-rc.1] - 2025-12-01
 
