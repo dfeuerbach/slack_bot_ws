@@ -327,8 +327,8 @@ defmodule SlackBot.RateLimiter do
     else
       {blocked_until, adapter_state} = state.adapter.blocked_until(state.adapter_state, key, now)
 
-          state
-          |> Map.put(:adapter_state, adapter_state)
+      state
+      |> Map.put(:adapter_state, adapter_state)
       |> maybe_process_waiters(key, method, queue, blocked_until, now)
     end
   end
@@ -375,11 +375,11 @@ defmodule SlackBot.RateLimiter do
 
       emit_drain(state.config, ctx.key, 1, delay_ms: Timer.delay_ms(ctx.timer_info))
       emit_decision(state.config, ctx.key, queued_method, :allow, Queue.size(rest_queue), 1)
-    GenServer.reply(queued_from, :ok)
+      GenServer.reply(queued_from, :ok)
 
       in_flight_map = Map.put(state.in_flight, ctx.key, 1)
-    %{state | queues: queues, in_flight: in_flight_map}
-  end
+      %{state | queues: queues, in_flight: in_flight_map}
+    end
   end
 
   defp maybe_schedule_block_timer(

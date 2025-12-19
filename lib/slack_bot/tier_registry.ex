@@ -2,10 +2,10 @@ defmodule SlackBot.TierRegistry.Builder do
   @moduledoc false
 
   @base_spec %{
-      scope: :workspace,
-      burst_ratio: 0.25,
-      initial_fill_ratio: 0.5
-    }
+    scope: :workspace,
+    burst_ratio: 0.25,
+    initial_fill_ratio: 0.5
+  }
 
   @tier_defaults %{
     tier1: %{tier: :tier1, window_ms: 60_000, max_calls: 1},
