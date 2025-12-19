@@ -1,5 +1,5 @@
 defmodule SlackBot.APITest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias SlackBot.API
   alias SlackBot.Config

@@ -6,6 +6,24 @@ defmodule SlackBot.RateLimiter do
   alias SlackBot.Config
   alias SlackBot.RateLimiter.Adapter
   alias SlackBot.RateLimiter.Adapters.ETS
+  alias SlackBot.RateLimiter.{Queue, Timer}
+  alias __MODULE__.CallbackCtx
+
+  defmodule CallbackCtx do
+    @moduledoc false
+
+    defstruct [
+      :key,
+      :method,
+      :queue,
+      :blocked_until,
+      :now,
+      :in_flight,
+      :timer_info,
+      :prev_queue_length
+    ]
+  end
+
   alias SlackBot.Telemetry
 
   @typedoc "Key used to scope rate limiting (channel, workspace, etc.)."
@@ -18,6 +36,8 @@ defmodule SlackBot.RateLimiter do
     chat.scheduleMessage
     chat.postEphemeral
   )
+
+  defguardp future_blocked(value, now) when is_integer(value) and value > now
 
   @doc """
   Returns a child specification for the configured rate limiter.
@@ -60,21 +80,22 @@ defmodule SlackBot.RateLimiter do
     key = classify_request(method, body)
     server = server_name(config.instance_name)
 
-    :ok =
-      GenServer.call(
-        server,
-        {:before_request, key, method},
-        Keyword.get(config.api_pool_opts, :request_timeout, :infinity)
-      )
+    :ok = GenServer.call(server, {:before_request, key, method}, :infinity)
 
     try do
-      result = fun.()
-      GenServer.cast(server, {:after_request, key, method, result})
-      result
+      fun.()
     rescue
       exception ->
         GenServer.cast(server, {:after_request, key, method, {:exception, exception}})
         reraise exception, __STACKTRACE__
+    else
+      result ->
+        GenServer.cast(server, {:after_request, key, method, result})
+        result
+    catch
+      kind, value ->
+        GenServer.cast(server, {:after_request, key, method, {kind, value}})
+        :erlang.raise(kind, value, __STACKTRACE__)
     end
   end
 
@@ -109,63 +130,26 @@ defmodule SlackBot.RateLimiter do
     {blocked_until, adapter_state} = state.adapter.blocked_until(state.adapter_state, key, now)
 
     in_flight = Map.get(state.in_flight, key, 0)
-    queue = Map.get(state.queues, key, :queue.new())
-    prev_queue_length = :queue.len(queue)
+    queue = Map.get(state.queues, key, Queue.new())
+    prev_queue_length = Queue.size(queue)
 
-    decision =
-      cond do
-        is_integer(blocked_until) and blocked_until > now ->
-          :queue
-
-        in_flight > 0 ->
-          :queue
-
-        true ->
-          :allow
-      end
-
-    case decision do
+    case before_request_decision(blocked_until, now, in_flight) do
       :allow ->
-        in_flight_map = Map.put(state.in_flight, key, in_flight + 1)
-
-        emit_decision(state.config, key, method, :allow, 0, in_flight + 1)
-
-        new_state = %{state | adapter_state: adapter_state, in_flight: in_flight_map}
-
-        {:reply, :ok, new_state}
+        allow_before_request(state, key, method, in_flight, adapter_state)
 
       :queue ->
-        queue = :queue.in(from, queue)
-        queues = Map.put(state.queues, key, queue)
-        queue_length = :queue.len(queue)
+        ctx =
+          %CallbackCtx{
+            key: key,
+            method: method,
+            queue: queue,
+            blocked_until: blocked_until,
+            now: now,
+            in_flight: in_flight,
+            prev_queue_length: prev_queue_length
+          }
 
-        emit_decision(state.config, key, method, :queue, queue_length, in_flight)
-
-        release_timers =
-          if prev_queue_length == 0 and is_integer(blocked_until) and blocked_until > now do
-            delay = max(blocked_until - now, 1)
-
-            case Map.fetch(state.release_timers, key) do
-              {:ok, _ref} ->
-                state.release_timers
-
-              :error ->
-                ref = Process.send_after(self(), {:release_key, key}, delay)
-                emit_blocked(state.config, key, method, delay)
-                Map.put(state.release_timers, key, %{ref: ref, delay_ms: delay, method: method})
-            end
-          else
-            state.release_timers
-          end
-
-        new_state = %{
-          state
-          | adapter_state: adapter_state,
-            queues: queues,
-            release_timers: release_timers
-        }
-
-        {:noreply, new_state}
+        queue_before_request(state, from, ctx, adapter_state)
     end
   end
 
@@ -184,108 +168,47 @@ defmodule SlackBot.RateLimiter do
       end
 
     queues = state.queues
-    queue = Map.get(queues, key, :queue.new())
+    queue = Map.get(queues, key, Queue.new())
 
     # Emit a dedicated rate-limited event when we see Slack's ratelimited error.
     maybe_emit_rate_limited(state.config, key, method, result, now)
 
-    {queues, in_flight_map, release_timers, latest_adapter_state} =
-      case {in_flight, :queue.is_empty(queue)} do
-        {0, false} ->
-          {blocked_until, newest_adapter_state} =
-            state.adapter.blocked_until(new_adapter_state, key, now)
+    updated_state = %{
+      state
+      | adapter_state: new_adapter_state,
+        in_flight: in_flight_map,
+        queues: queues
+    }
 
-          if is_integer(blocked_until) and blocked_until > now do
-            delay = max(blocked_until - now, 1)
-
-            release_timers =
-              case Map.fetch(state.release_timers, key) do
-                {:ok, _ref} ->
-                  state.release_timers
-
-                :error ->
-                  ref = Process.send_after(self(), {:release_key, key}, delay)
-                  emit_blocked(state.config, key, method, delay)
-                  Map.put(state.release_timers, key, %{ref: ref, delay_ms: delay, method: method})
-              end
-
-            {queues, in_flight_map, release_timers, newest_adapter_state}
-          else
-            {{:value, queued_from}, queue} = :queue.out(queue)
-            queues = update_queue_map(queues, key, queue)
-
-            emit_decision(state.config, key, method, :allow, :queue.len(queue), 1)
-
-            GenServer.reply(queued_from, :ok)
-
-            in_flight_map = Map.put(in_flight_map, key, 1)
-
-            {queues, in_flight_map, state.release_timers, new_adapter_state}
-          end
-
-        _ ->
-          {queues, in_flight_map, state.release_timers, new_adapter_state}
-      end
-
-    {:noreply,
-     %{
-       state
-       | adapter_state: latest_adapter_state,
-         queues: queues,
-         in_flight: in_flight_map,
-         release_timers: release_timers
-     }}
+    {:noreply, finalize_after_request(updated_state, key, method, queue, in_flight, now)}
   end
 
   @impl true
   def handle_info({:release_key, key}, state) do
     now = now_ms()
     {blocked_until, adapter_state} = state.adapter.blocked_until(state.adapter_state, key, now)
-    queue = Map.get(state.queues, key, :queue.new())
+    queue = Map.get(state.queues, key, Queue.new())
     in_flight = Map.get(state.in_flight, key, 0)
 
     {timer_info, release_timers} = Map.pop(state.release_timers, key)
 
-    {queues, in_flight_map, release_timers} =
-      cond do
-        is_integer(blocked_until) and blocked_until > now ->
-          # Still blocked; reschedule.
-          delay = max(blocked_until - now, 1)
-          ref = Process.send_after(self(), {:release_key, key}, delay)
-          method = timer_method(timer_info)
-          emit_blocked(state.config, key, method, delay)
+    ctx = %CallbackCtx{
+      key: key,
+      method: Timer.method(timer_info),
+      queue: queue,
+      blocked_until: blocked_until,
+      now: now,
+      in_flight: in_flight,
+      timer_info: timer_info
+    }
 
-          {
-            state.queues,
-            state.in_flight,
-            Map.put(release_timers, key, %{ref: ref, delay_ms: delay, method: method})
-          }
+    new_state =
+      state
+      |> Map.put(:adapter_state, adapter_state)
+      |> Map.put(:release_timers, release_timers)
+      |> handle_release_event(ctx)
 
-        in_flight > 0 or :queue.is_empty(queue) ->
-          {state.queues, state.in_flight, release_timers}
-
-        true ->
-          {{:value, queued_from}, queue} = :queue.out(queue)
-          queues = update_queue_map(state.queues, key, queue)
-
-          emit_drain(state.config, key, 1, delay_ms: timer_delay(timer_info))
-          emit_decision(state.config, key, :unknown, :allow, :queue.len(queue), 1)
-
-          GenServer.reply(queued_from, :ok)
-
-          in_flight_map = Map.put(state.in_flight, key, 1)
-
-          {queues, in_flight_map, release_timers}
-      end
-
-    {:noreply,
-     %{
-       state
-       | adapter_state: adapter_state,
-         queues: queues,
-         in_flight: in_flight_map,
-         release_timers: release_timers
-     }}
+    {:noreply, new_state}
   end
 
   defp unwrap_result({:exception, _} = result), do: result
@@ -313,7 +236,7 @@ defmodule SlackBot.RateLimiter do
   defp adapter_from_config(%Config{}), do: {ETS, []}
 
   defp update_queue_map(queues, key, queue) do
-    if :queue.is_empty(queue) do
+    if Queue.empty?(queue) do
       Map.delete(queues, key)
     else
       Map.put(queues, key, queue)
@@ -358,11 +281,137 @@ defmodule SlackBot.RateLimiter do
 
   defp maybe_put_measurement(map, _key, _value), do: map
 
-  defp timer_delay(%{delay_ms: delay}) when is_integer(delay), do: delay
-  defp timer_delay(_), do: nil
+  defp before_request_decision(blocked_until, now, _in_flight)
+       when future_blocked(blocked_until, now),
+       do: :queue
 
-  defp timer_method(%{method: method}) when not is_nil(method), do: method
-  defp timer_method(_), do: :unknown
+  defp before_request_decision(_blocked_until, _now, in_flight) when in_flight > 0, do: :queue
+
+  defp before_request_decision(_blocked_until, _now, _in_flight), do: :allow
+
+  defp allow_before_request(state, key, method, in_flight, adapter_state) do
+    in_flight_map = Map.put(state.in_flight, key, in_flight + 1)
+    emit_decision(state.config, key, method, :allow, 0, in_flight + 1)
+    {:reply, :ok, %{state | adapter_state: adapter_state, in_flight: in_flight_map}}
+  end
+
+  defp queue_before_request(state, from, %CallbackCtx{} = ctx, adapter_state) do
+    queue = Queue.push(ctx.queue, {from, ctx.method})
+    queues = Map.put(state.queues, ctx.key, queue)
+    queue_length = Queue.size(queue)
+
+    emit_decision(state.config, ctx.key, ctx.method, :queue, queue_length, ctx.in_flight)
+
+    release_timers =
+      maybe_schedule_block_timer(
+        state,
+        %CallbackCtx{ctx | queue: queue}
+      )
+
+    new_state = %{
+      state
+      | adapter_state: adapter_state,
+        queues: queues,
+        release_timers: release_timers
+    }
+
+    {:noreply, new_state}
+  end
+
+  defp finalize_after_request(state, _key, _method, _queue, in_flight, _now) when in_flight > 0,
+    do: state
+
+  defp finalize_after_request(state, key, method, queue, _in_flight, now) do
+    if Queue.empty?(queue) do
+      state
+    else
+      {blocked_until, adapter_state} = state.adapter.blocked_until(state.adapter_state, key, now)
+
+      state
+      |> Map.put(:adapter_state, adapter_state)
+      |> maybe_process_waiters(key, method, queue, blocked_until, now)
+    end
+  end
+
+  defp maybe_process_waiters(state, key, method, _queue, blocked_until, now)
+       when future_blocked(blocked_until, now) do
+    delay = Timer.clamp(blocked_until - now)
+    release_timers = schedule_release_timer(state, key, method, delay)
+    %{state | release_timers: release_timers}
+  end
+
+  defp maybe_process_waiters(state, key, _method, queue, _blocked_until, _now) do
+    release_next_waiter(state, key, queue)
+  end
+
+  defp release_next_waiter(state, key, queue) do
+    {{:value, {queued_from, queued_method}}, rest_queue} = Queue.pop(queue)
+    queues = update_queue_map(state.queues, key, rest_queue)
+
+    emit_decision(state.config, key, queued_method, :allow, Queue.size(rest_queue), 1)
+    GenServer.reply(queued_from, :ok)
+
+    in_flight_map = Map.put(state.in_flight, key, 1)
+    %{state | queues: queues, in_flight: in_flight_map}
+  end
+
+  defp handle_release_event(state, %CallbackCtx{} = ctx)
+       when future_blocked(ctx.blocked_until, ctx.now) do
+    delay = Timer.clamp(ctx.blocked_until - ctx.now)
+    release_timers = schedule_release_timer(state, ctx.key, ctx.method, delay)
+    %{state | release_timers: release_timers}
+  end
+
+  defp handle_release_event(state, %CallbackCtx{in_flight: in_flight})
+       when in_flight > 0,
+       do: state
+
+  defp handle_release_event(state, %CallbackCtx{} = ctx) do
+    if Queue.empty?(ctx.queue) do
+      state
+    else
+      {{:value, {queued_from, queued_method}}, rest_queue} = Queue.pop(ctx.queue)
+      queues = update_queue_map(state.queues, ctx.key, rest_queue)
+
+      emit_drain(state.config, ctx.key, 1, delay_ms: Timer.delay_ms(ctx.timer_info))
+      emit_decision(state.config, ctx.key, queued_method, :allow, Queue.size(rest_queue), 1)
+      GenServer.reply(queued_from, :ok)
+
+      in_flight_map = Map.put(state.in_flight, ctx.key, 1)
+      %{state | queues: queues, in_flight: in_flight_map}
+    end
+  end
+
+  defp maybe_schedule_block_timer(
+         state,
+         %CallbackCtx{prev_queue_length: prev_queue_length}
+       )
+       when prev_queue_length > 0,
+       do: state.release_timers
+
+  defp maybe_schedule_block_timer(
+         state,
+         %CallbackCtx{blocked_until: blocked_until, now: now}
+       )
+       when not future_blocked(blocked_until, now),
+       do: state.release_timers
+
+  defp maybe_schedule_block_timer(state, %CallbackCtx{} = ctx) do
+    delay = Timer.clamp(ctx.blocked_until - ctx.now)
+    schedule_release_timer(state, ctx.key, ctx.method, delay)
+  end
+
+  defp schedule_release_timer(state, key, method, delay) do
+    case Map.fetch(state.release_timers, key) do
+      {:ok, _ref} ->
+        state.release_timers
+
+      :error ->
+        ref = Process.send_after(self(), {:release_key, key}, delay)
+        emit_blocked(state.config, key, method, delay)
+        Map.put(state.release_timers, key, %{ref: ref, delay_ms: delay, method: method})
+    end
+  end
 
   defp maybe_emit_rate_limited(config, key, method, {:error, {:rate_limited, secs}}, now)
        when is_integer(secs) and secs > 0 do
