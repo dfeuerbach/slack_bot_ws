@@ -70,10 +70,13 @@ defmodule SlackBot.Diagnostics.Server do
     types = Keyword.get(opts, :types, :all)
     order = Keyword.get(opts, :order, :newest_first)
 
+    predicate = fn entry ->
+      match_direction?(entry, direction) and match_type?(entry, types)
+    end
+
     entries
     |> maybe_reverse(order)
-    |> Enum.filter(&match_direction?(&1, direction))
-    |> Enum.filter(&match_type?(&1, types))
+    |> Enum.filter(predicate)
     |> Enum.take(limit)
   end
 

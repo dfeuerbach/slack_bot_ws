@@ -1,8 +1,8 @@
 defmodule SlackBot.EventBuffer do
   @moduledoc false
 
-  alias SlackBot.EventBuffer.Server
   alias SlackBot.EventBuffer.Adapters.ETS
+  alias SlackBot.EventBuffer.Server
 
   @type adapter_spec ::
           {:ets, keyword()}

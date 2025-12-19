@@ -204,7 +204,9 @@ defmodule SlackBot.Blocks do
 
   defp run_blockbox(fun) do
     if blockbox_loaded?() do
-      apply(BlockBox, :build, [fun])
+      blockbox_module()
+      |> Function.capture(:build, 1)
+      |> invoke_blockbox(fun)
     else
       Logger.warning(
         "[SlackBot] block_builder set to :blockbox but the dependency is not available. Falling back to map helpers."
@@ -215,8 +217,13 @@ defmodule SlackBot.Blocks do
   end
 
   defp blockbox_loaded? do
-    Code.ensure_loaded?(BlockBox) and function_exported?(BlockBox, :build, 1)
+    module = blockbox_module()
+    Code.ensure_loaded?(module) and function_exported?(module, :build, 1)
   end
+
+  defp blockbox_module, do: Module.concat([Elixir, :BlockBox])
+
+  defp invoke_blockbox(fun, arg), do: fun.(arg)
 
   defp maybe_accessory(block, opts) do
     case Keyword.get(opts, :accessory) do

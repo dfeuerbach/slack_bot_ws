@@ -1,12 +1,16 @@
 defmodule SlackBot.EventBufferTest do
+  @moduledoc false
   use ExUnit.Case, async: true
 
   import ExUnit.CaptureLog
 
   alias SlackBot.EventBuffer
+  alias SlackBot.EventBuffer.Adapter
+  alias SlackBot.EventBuffer.Adapters.Redis
 
   defmodule CustomAdapter do
-    @behaviour SlackBot.EventBuffer.Adapter
+    @moduledoc false
+    @behaviour Adapter
 
     def init(_opts) do
       {:ok, %{entries: %{}}}
@@ -37,6 +41,7 @@ defmodule SlackBot.EventBufferTest do
   end
 
   defmodule RedisErrorRedix do
+    @moduledoc false
     def start_link(_opts), do: {:ok, self()}
     def command(_conn, _command), do: {:error, :redis_down}
     def pipeline(_conn, _commands), do: {:error, :redis_down}
@@ -96,19 +101,19 @@ defmodule SlackBot.EventBufferTest do
     capture_log(fn ->
       opts = [instance_name: EventBufferTest.RedisInstance, redix: RedisErrorRedix, ttl_ms: 1_000]
 
-      assert {:ok, state} = SlackBot.EventBuffer.Adapters.Redis.init(opts)
+      assert {:ok, state} = Redis.init(opts)
 
       # record/3 should still return {:ok, state} even when Redis fails
-      assert {:ok, _} = SlackBot.EventBuffer.Adapters.Redis.record(state, "E1", %{payload: :ok})
+      assert {:ok, _} = Redis.record(state, "E1", %{payload: :ok})
 
       # delete/2 should return {:ok, state} on error
-      assert {:ok, _} = SlackBot.EventBuffer.Adapters.Redis.delete(state, "E1")
+      assert {:ok, _} = Redis.delete(state, "E1")
 
       # seen?/2 should treat errors as "not seen"
-      assert {false, _} = SlackBot.EventBuffer.Adapters.Redis.seen?(state, "E1")
+      assert {false, _} = Redis.seen?(state, "E1")
 
       # pending/1 should return an empty list on errors
-      assert {[], _} = SlackBot.EventBuffer.Adapters.Redis.pending(state)
+      assert {[], _} = Redis.pending(state)
     end)
   end
 end

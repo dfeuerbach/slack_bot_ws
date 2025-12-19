@@ -281,14 +281,23 @@ defmodule SlackBot.Router do
     end
   end
 
-  defp apply_middleware({mod, func}, type, payload, ctx),
-    do: apply(mod, func, [type, payload, ctx])
+  defp apply_middleware({mod, func}, type, payload, ctx)
+       when is_atom(mod) and is_atom(func) do
+    mod
+    |> Function.capture(func, 3)
+    |> invoke_middleware(type, payload, ctx)
+  end
 
   defp apply_middleware(fun, type, payload, ctx) when is_function(fun, 3),
     do: fun.(type, payload, ctx)
 
-  defp apply_middleware(fun, type, payload, ctx) when is_atom(fun),
-    do: apply(fun, :call, [type, payload, ctx])
+  defp apply_middleware(fun, type, payload, ctx) when is_atom(fun) do
+    fun
+    |> Function.capture(:call, 3)
+    |> invoke_middleware(type, payload, ctx)
+  end
+
+  defp invoke_middleware(fun, type, payload, ctx), do: fun.(type, payload, ctx)
 
   defp emit_middleware_halt(ctx, type, middleware, response) do
     case ctx do

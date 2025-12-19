@@ -6,7 +6,10 @@ defmodule SlackBot.RateLimiter do
   alias SlackBot.Config
   alias SlackBot.RateLimiter.Adapter
   alias SlackBot.RateLimiter.Adapters.ETS
-  alias SlackBot.RateLimiter.{Queue, Timer}
+  alias SlackBot.RateLimiter.Queue
+  alias SlackBot.RateLimiter.Timer
+  alias SlackBot.Telemetry
+
   alias __MODULE__.CallbackCtx
 
   defmodule CallbackCtx do
@@ -23,8 +26,6 @@ defmodule SlackBot.RateLimiter do
       :prev_queue_length
     ]
   end
-
-  alias SlackBot.Telemetry
 
   @typedoc "Key used to scope rate limiting (channel, workspace, etc.)."
   @type key :: term()

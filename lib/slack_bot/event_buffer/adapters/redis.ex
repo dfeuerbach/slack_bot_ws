@@ -144,47 +144,49 @@ defmodule SlackBot.EventBuffer.Adapters.Redis do
   defp pipeline(state, commands), do: state.redix.pipeline(state.conn, commands)
 
   defp decode(value) when is_binary(value) do
-    try do
-      {:ok, :erlang.binary_to_term(value)}
-    rescue
-      _ -> :error
-    end
+    {:ok, :erlang.binary_to_term(value)}
+  rescue
+    _ -> :error
   end
 
   defp do_pending(state) do
-    case command(state, ["ZRANGE", pending_key(state), 0, -1]) do
-      {:ok, []} ->
-        {[], state}
+    state
+    |> command(["ZRANGE", pending_key(state), 0, -1])
+    |> handle_pending_keys(state)
+  end
 
-      {:ok, keys} ->
-        case command(state, ["MGET" | keys]) do
-          {:ok, values} ->
-            payloads =
-              keys
-              |> Enum.zip(values)
-              |> Enum.reduce([], fn
-                {_key, nil}, acc ->
-                  acc
+  defp handle_pending_keys({:ok, []}, state), do: {[], state}
 
-                {_key, value}, acc ->
-                  case decode(value) do
-                    {:ok, %{payload: payload}} -> [payload | acc]
-                    _ -> acc
-                  end
-              end)
-              |> Enum.reverse()
-
-            {payloads, state}
-
-          {:error, reason} ->
-            log_error(:pending, reason, state)
-            {[], state}
-        end
+  defp handle_pending_keys({:ok, keys}, state) do
+    case command(state, ["MGET" | keys]) do
+      {:ok, values} ->
+        {build_pending_payloads(keys, values), state}
 
       {:error, reason} ->
         log_error(:pending, reason, state)
         {[], state}
     end
+  end
+
+  defp handle_pending_keys({:error, reason}, state) do
+    log_error(:pending, reason, state)
+    {[], state}
+  end
+
+  defp build_pending_payloads(keys, values) do
+    keys
+    |> Enum.zip(values)
+    |> Enum.reduce([], fn
+      {_key, nil}, acc ->
+        acc
+
+      {_key, value}, acc ->
+        case decode(value) do
+          {:ok, %{payload: payload}} -> [payload | acc]
+          _ -> acc
+        end
+    end)
+    |> Enum.reverse()
   end
 
   defp log_error(operation, reason, %{instance: instance}) do
