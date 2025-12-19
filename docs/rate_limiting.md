@@ -2,160 +2,56 @@
 
 Slack imposes rate limits on Web API calls to protect its infrastructure and ensure fair access across all apps. If your bot exceeds these limits, Slack returns `429 Too Many Requests` with a `Retry-After` header indicating how long to wait.
 
-SlackBot handles rate limiting automatically through two complementary layers. This guide explains what Slack enforces, how SlackBot responds, and when you might want to tune the defaults.
+SlackBot handles rate limiting automatically through two complementary layers:
 
-## Slack's Rate Limit Structure
+1. **Rate limiter** – Shapes bursts on a per-channel (for the “chat.*” family) or per-workspace basis so you don’t overrun Slack’s immediate-rate guardrails. This is the component invoked before each Web API call via `SlackBot.push/2` or `SlackBot.push_async/2`.
 
-Slack organizes rate limits into two dimensions:
+2. **Tier limiter** – Tracks Slack’s published per-method quotas (Tier 1–4 + special tiers) and queues requests so you honor the longer-term limits documented in [Slack’s API rate guide](https://docs.slack.dev/apis/web-api/rate-limits).
 
-### Per-Channel / Per-Workspace Limits
+## Rate limiter (“burst” protection)
 
-High-volume methods like `chat.postMessage` have per-channel burst limits. Sending many messages to the same channel in quick succession triggers throttling even if your overall API usage is moderate. Other methods use workspace-level limits.
+Every outbound Web API call goes through `SlackBot.RateLimiter` by default. The rate limiter keeps a queue per “key” (per-channel for chat-style methods, per-workspace for others) and gates entry so you never run more than one request per key when Slack’s rules would reject you anyway (e.g., Slack’s 1 message/second/channel policy). If Slack responds with `429` and a `Retry-After`, the limiter suspends that key for the specified duration before draining the queue.
 
-### Tier-Based Quotas
+You can observe back pressure by subscribing to the built-in telemetry:
 
-Slack groups methods into tiers with different quotas:
+* `[:slackbot, :rate_limiter, :decision]` with `decision: :queue` and `measurement[:queue_length]` whenever a request has to wait.
+* `[:slackbot, :rate_limiter, :blocked]` whenever a key is paused due to a `Retry-After`.
 
-| Tier | Typical Quota | Example Methods |
-|------|---------------|-----------------|
-| Tier 1 | 1 per minute | `chat.delete`, `files.delete` |
-| Tier 2 | 20 per minute | `users.list`, `users.conversations`, `conversations.list` |
-| Tier 3 | 50 per minute | `chat.postMessage`, `reactions.add` |
-| Tier 4 | 100+ per minute | `users.info`, `conversations.info` |
-| Special | Varies | Some methods have unique limits |
+These events can be fed into `Telemetry.Metrics` (e.g., `last_value` or `distribution`) to derive average queue depths or to detect when Slack is throttling a key.
 
-These quotas are per-workspace, not per-channel. A bot calling `users.list` 20 times in a minute will be rate-limited on the 21st call regardless of which channels it's active in.
+Because the rate limiter is enforcing Slack’s pacing rules, it does not have its own timeout; the `GenServer.call/3` inside `around_request/4` uses `:infinity` so requests will sit in the queue until Slack allows them to proceed. If you need a client-side timeout, wrap your `SlackBot.push/2` call in your own `Task.async/await` with a timeout and cancel the task if you can’t wait.
 
-> **On burst traffic:** Slack's quotas are rolling averages, so short bursts within a window may succeed. However, sustained bursts quickly exhaust the quota. SlackBot's tier limiter allows controlled bursting (25% headroom by default via `burst_ratio`) while smoothing sustained traffic to stay within limits—you get responsiveness for spikes without overly risking `429` responses on heavy workloads.
+The limiter also guarantees that slots are released even if your code raises, throws, or exits. `SlackBot.RateLimiter.around_request/4` wraps each call in a `try/rescue/catch` so the `{:after_request, ...}` bookkeeping message is delivered no matter how the user function finishes.
 
-## How SlackBot Handles This
+## Tier-based quotas
 
-SlackBot uses two complementary limiters. Both run before any request reaches Slack.
+Slack groups Web API methods into “tiers” (1–4 plus a few special buckets) that define how many calls per minute you can make per workspace. SlackBot encodes those quotas in `SlackBot.TierRegistry`: each method maps to a spec with `max_calls`, `window_ms`, `scope`, optional `group` sharing, and (for “special” cases like `chat.postMessage`) a reasonable default based on Slack’s docs. The tier limiter tracks each spec independently and queues requests so you don’t exceed the published budget.
 
-### Tier Limiter (Method Quotas)
-
-The tier limiter enforces Slack's published per-method quotas proactively. Each method belongs to a tier (or group of methods sharing a budget). SlackBot maintains a token bucket for each:
-
-- Tokens refill over time according to the tier's quota
-- A request consumes one token
-- If no tokens are available, the request waits (queues) until tokens refill
-
-This means your bot naturally paces itself to stay within Slack's published limits, rather than blasting requests and waiting for `429` responses.
-
-### Per-Channel Rate Limiter (Burst & 429 Handling)
-
-For chat methods (`chat.postMessage`, `chat.update`, `chat.delete`, `chat.scheduleMessage`, `chat.postEphemeral`), requests are keyed by channel ID to prevent flooding a single channel. Other methods use a workspace-level key.
-
-If Slack returns `429`, the rate limiter:
-
-1. Reads the `Retry-After` header
-2. Blocks subsequent requests to that key until the window expires
-3. Drains queued requests once the window passes
-
-This layer handles the cases where Slack imposes limits beyond the published tiers—channel-specific throttling or unexpected rate-limit responses.
-
-### What This Means for You
-
-In most cases, you don't need to think about rate limiting at all:
-
-```elixir
-# This just works—SlackBot paces these calls automatically
-for channel_id <- channels do
-  SlackBot.push(bot, {"chat.postMessage", %{
-    "channel" => channel_id,
-    "text" => "Hello!"
-  }})
-end
-```
-
-If you're calling many different methods in a tight loop, the tier limiter queues requests so they trickle out at the correct rate:
-
-```elixir
-# users.list and users.conversations share the Tier 2 budget (20/min)
-# SlackBot queues automatically so you don't hit 429
-SlackBot.push(bot, {"users.list", %{}})
-SlackBot.push(bot, {"users.conversations", %{}})
-```
-
-## Telemetry Events
-
-Both limiters emit Telemetry events so you can observe their behavior:
-
-| Event | What It Means |
-|-------|---------------|
-| `[:slackbot, :rate_limiter, :decision]` | A request was allowed or queued; includes `queue_length` and `in_flight` counts |
-| `[:slackbot, :rate_limiter, :blocked]` | Slack returned `429`; includes `delay_ms` |
-| `[:slackbot, :rate_limiter, :drain]` | Queued requests were released after a block window |
-| `[:slackbot, :tier_limiter, :decision]` | A method was allowed or queued; includes `tokens` remaining |
-| `[:slackbot, :tier_limiter, :suspend]` | A tier bucket was suspended due to `429`; includes `delay_ms` |
-| `[:slackbot, :tier_limiter, :resume]` | A suspended bucket resumed |
-
-If you're seeing `queue_length` spikes, your bot may be generating requests faster than Slack allows. Consider batching work or spreading it over time.
-
-## Configuration
-
-### Disabling Rate Limiting
-
-If you have external shaping (a proxy, another rate limiter), you can disable SlackBot's:
-
-```elixir
-config :my_app, MyApp.SlackBot,
-  rate_limiter: :none
-```
-
-This is rarely needed. The default ETS-backed limiter has minimal overhead.
-
-### Customizing the Rate Limiter Adapter
-
-```elixir
-config :my_app, MyApp.SlackBot,
-  rate_limiter: {:adapter, SlackBot.RateLimiter.Adapters.ETS, [
-    table: :my_custom_table,
-    ttl_ms: 10 * 60_000
-  ]}
-```
-
-### Overriding Tier Registry Entries
-
-If Slack changes quotas or you need custom grouping:
+You typically don’t need to configure this at all. If Slack updates their quotas or if you have an alternative agreed-upon allotment, you can override entries via:
 
 ```elixir
 config :slack_bot_ws, SlackBot.TierRegistry,
   tiers: %{
-    # Lower the quota for users.list
-    "users.list" => %{max_calls: 10, window_ms: 60_000},
-
-    # Group a custom method with metadata calls
-    "my.custom.method" => %{group: :metadata_catalog}
+    "users.list" => %{max_calls: 10, window_ms: 45_000},
+    "users.conversations" => %{group: :my_custom_group}
   }
 ```
 
-Each entry supports:
+Note that the tier registry is eager for correctness: it only encodes the methods documented by Slack today, and defaults to `:workspace` scope unless Slack mandates `{:channel, field}` or a shared group. Don’t set arbitrary `scope`/`max_calls` values unless you’re aligning with Slack’s guidance.
 
-| Key | Description |
-|-----|-------------|
-| `:max_calls` | Maximum calls per window |
-| `:window_ms` | Window duration in milliseconds |
-| `:scope` | `:workspace` or `{:channel, field}` |
-| `:group` | Atom to share a budget with other methods |
-| `:burst_ratio` | Additional burst headroom (default 0.25) |
-| `:initial_fill_ratio` | How full new buckets start (default 0.5) |
-| `:tier` | Informational label |
+## Observability
 
-## Background Sync Considerations
+All limiter activity is surfaced via `:telemetry` to make it easy to build dashboards and alerts. In addition to the rate limiter events above, the tier limiter emits:
 
-SlackBot's cache sync calls `users.conversations` to keep channel membership current. This method is Tier 2 (20/min). If you have many channels or enable user sync, the sync spreads calls over time automatically.
+* `[:slackbot, :tier_limiter, :decision]` with `queue_length` and remaining `tokens` whenever a method increments or queues.
+* `[:slackbot, :tier_limiter, :suspend]` and `[:slackbot, :tier_limiter, :resume]` when a tier budget is paused due to Slack saying “slow down” and when it resumes.
 
-If you see `[:slackbot, :tier_limiter, :suspend]` events during sync, the sync is working correctly—it's pausing to respect Slack's quotas rather than failing.
+You can register metrics on these events (e.g., average queue length, number of suspensions per key, token utilization) to understand how close you are to Slack’s limits.
 
-## Summary
+## Configuration cheatsheet
 
-- SlackBot enforces rate limits at two layers: per-channel/workspace and per-method tier
-- Requests queue automatically instead of failing immediately
-- You can observe limiter behavior via Telemetry
-- Defaults work for most bots; override only when you have specific needs
+* `rate_limiter: :none` – disables the per-key burst limiter if you absolutely must bypass client-side shaping (not recommended unless your infrastructure enforces Slack’s per-channel/per-workspace rates).
+* `config :slack_bot_ws, SlackBot.TierRegistry, tiers: %{...}` – override or add per-method specs if you’ve negotiated bespoke quotas with Slack.
+* `api_pool_opts` – still controls the HTTP client’s timeout/connection pool, independently of the limiter’s logic.
 
-## Next Steps
-
-- [Telemetry Guide](telemetry_dashboard.md) — wire limiter events to LiveDashboard
-- [Diagnostics Guide](diagnostics.md) — correlate rate-limit events with captured payloads
+By default, leaving the limiters enabled is the safest way to stay on Slack’s good side: your bot will queue and pace its calls locally, honor Slack’s published quotas, and surface telemetry so you can react before hitting hard API caps.

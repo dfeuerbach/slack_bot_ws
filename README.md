@@ -230,6 +230,8 @@ config :slack_bot_ws, SlackBot.TierRegistry,
   }
 ```
 
+SlackBot ships with default specs for every Slack Web API method listed in the published tier tables (including special cases like `chat.postMessage`). Overrides are only necessary when Slack revises quotas or when custom grouping is desired.
+
 See [Rate Limiting Guide](docs/rate_limiting.md) for a full explanation of how tier-aware limiting works and how to tune it.
 
 ### Slash-command acknowledgements
