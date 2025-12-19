@@ -9,9 +9,9 @@ defmodule SlackBot.Config do
 
   @app :slack_bot_ws
   alias SlackBot.API
-  alias SlackBot.Socket
-  alias SlackBot.SlashAck.HTTP, as: AckHTTP
   alias SlackBot.RateLimiter.Adapters.ETS, as: RateLimiterETS
+  alias SlackBot.SlashAck.HTTP, as: AckHTTP
+  alias SlackBot.Socket
 
   @enforce_keys [:app_token, :bot_token, :module]
   defstruct [
@@ -454,8 +454,6 @@ defmodule SlackBot.Config do
   end
 
   defp fetch_cache_sync(opts) do
-    raw = Keyword.get(opts, :cache_sync, [])
-
     defaults = %{
       enabled: true,
       interval_ms: 3_600_000,
@@ -465,6 +463,13 @@ defmodule SlackBot.Config do
       users_conversations_opts: %{}
     }
 
+    opts
+    |> Keyword.get(:cache_sync, [])
+    |> normalize_cache_sync(defaults)
+    |> validate_cache_sync()
+  end
+
+  defp normalize_cache_sync(raw, defaults) do
     map =
       cond do
         is_list(raw) -> Map.merge(defaults, Map.new(raw))
@@ -474,31 +479,65 @@ defmodule SlackBot.Config do
         true -> :invalid
       end
 
-    with %{
-           enabled: enabled,
-           interval_ms: interval_ms,
-           kinds: kinds,
-           page_limit: page_limit,
-           include_presence: include_presence,
-           users_conversations_opts: users_conversations_opts
-         } = value
-         when map != :invalid <- map,
-         true <- is_boolean(enabled) || {:error, {:invalid_cache_sync_enabled, enabled}},
-         true <- positive?(interval_ms) || {:error, {:invalid_cache_sync_interval, interval_ms}},
-         true <- valid_kinds?(kinds) || {:error, {:invalid_cache_sync_kinds, kinds}},
-         true <-
-           (page_limit == :infinity or (is_integer(page_limit) and page_limit > 0)) ||
-             {:error, {:invalid_cache_sync_page_limit, page_limit}},
-         true <-
-           is_boolean(include_presence) ||
-             {:error, {:invalid_cache_sync_presence, include_presence}},
-         {:ok, normalized_opts} <- normalize_users_conversations_opts(users_conversations_opts) do
-      {:ok, %{value | users_conversations_opts: normalized_opts}}
-    else
+    case map do
       :invalid -> {:error, {:invalid_cache_sync_option, raw}}
-      {:error, _} = error -> error
+      value -> {:ok, value}
     end
   end
+
+  defp validate_cache_sync({:error, _} = error), do: error
+
+  defp validate_cache_sync(
+         {:ok,
+          %{
+            enabled: enabled,
+            interval_ms: interval_ms,
+            kinds: kinds,
+            page_limit: page_limit,
+            include_presence: include_presence,
+            users_conversations_opts: users_conversations_opts
+          } = value}
+       ) do
+    with :ok <- validate_cache_sync_enabled(enabled),
+         :ok <- validate_cache_sync_interval(interval_ms),
+         :ok <- validate_cache_sync_kinds(kinds),
+         :ok <- validate_cache_sync_page_limit(page_limit),
+         :ok <- validate_cache_sync_presence(include_presence),
+         {:ok, normalized_opts} <- normalize_users_conversations_opts(users_conversations_opts) do
+      {:ok, %{value | users_conversations_opts: normalized_opts}}
+    end
+  end
+
+  defp validate_cache_sync_enabled(value) when is_boolean(value), do: :ok
+  defp validate_cache_sync_enabled(value), do: {:error, {:invalid_cache_sync_enabled, value}}
+
+  defp validate_cache_sync_interval(value) do
+    if positive?(value) do
+      :ok
+    else
+      {:error, {:invalid_cache_sync_interval, value}}
+    end
+  end
+
+  defp validate_cache_sync_kinds(value) do
+    if valid_kinds?(value) do
+      :ok
+    else
+      {:error, {:invalid_cache_sync_kinds, value}}
+    end
+  end
+
+  defp validate_cache_sync_page_limit(:infinity), do: :ok
+
+  defp validate_cache_sync_page_limit(value) when is_integer(value) and value > 0, do: :ok
+
+  defp validate_cache_sync_page_limit(value),
+    do: {:error, {:invalid_cache_sync_page_limit, value}}
+
+  defp validate_cache_sync_presence(value) when is_boolean(value), do: :ok
+
+  defp validate_cache_sync_presence(value),
+    do: {:error, {:invalid_cache_sync_presence, value}}
 
   defp valid_jitter?(value) when is_number(value), do: value >= 0 and value <= 1
   defp valid_jitter?(_), do: false

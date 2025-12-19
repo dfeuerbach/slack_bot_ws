@@ -96,8 +96,8 @@ defmodule SlackBot.Diagnostics do
   """
 
   alias SlackBot.Config
-  alias SlackBot.Telemetry
   alias SlackBot.Diagnostics.Server
+  alias SlackBot.Telemetry
 
   @type direction :: :inbound | :outbound
   @type entry :: %{

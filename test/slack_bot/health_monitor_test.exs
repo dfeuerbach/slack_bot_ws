@@ -1,34 +1,40 @@
 defmodule SlackBot.HealthMonitorTest do
+  @moduledoc false
   use ExUnit.Case, async: true
 
-  alias SlackBot.HealthMonitor
   alias SlackBot.ConfigServer
+  alias SlackBot.HealthMonitor
 
   defmodule OkHTTP do
+    @moduledoc false
     def apps_connections_open(_config), do: {:ok, "wss://test.example/socket"}
     def post(_config, "auth.test", _body), do: {:ok, %{"ok" => true}}
     def post(_config, _method, body), do: {:ok, body}
   end
 
   defmodule ErrorHTTP do
+    @moduledoc false
     def apps_connections_open(_config), do: {:ok, "wss://test.example/socket"}
     def post(_config, "auth.test", _body), do: {:error, :econnrefused}
     def post(_config, _method, body), do: {:ok, body}
   end
 
   defmodule RateLimitedHTTP do
+    @moduledoc false
     def apps_connections_open(_config), do: {:ok, "wss://test.example/socket"}
     def post(_config, "auth.test", _body), do: {:error, {:rate_limited, 1}}
     def post(_config, _method, body), do: {:ok, body}
   end
 
   defmodule FatalHTTP do
+    @moduledoc false
     def apps_connections_open(_config), do: {:ok, "wss://test.example/socket"}
     def post(_config, "auth.test", _body), do: {:error, {:slack_error, "invalid_auth"}}
     def post(_config, _method, body), do: {:ok, body}
   end
 
   defmodule DummyConnMgr do
+    @moduledoc false
     use GenServer
 
     def start_link(opts) do

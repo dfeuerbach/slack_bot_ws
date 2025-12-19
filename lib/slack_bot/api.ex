@@ -69,26 +69,7 @@ defmodule SlackBot.API do
   defp interpret_response(%{"ok" => true} = body, _response), do: {:ok, body}
 
   defp interpret_response(%{"ok" => false, "error" => "ratelimited"} = body, response) do
-    header_retry_after =
-      case response do
-        %{headers: headers} ->
-          headers
-          |> Enum.find_value(fn {k, v} -> if String.downcase(k) == "retry-after", do: v end)
-
-        _ ->
-          nil
-      end
-
-    body_retry_after = body["retry_after"]
-
-    raw_retry_after = body_retry_after || header_retry_after
-
-    retry_after =
-      case raw_retry_after do
-        [value | _] -> to_integer(value, 1)
-        value -> to_integer(value, 1)
-      end
-
+    retry_after = compute_retry_after(body, response)
     {:error, {:rate_limited, retry_after}}
   end
 
@@ -103,13 +84,39 @@ defmodule SlackBot.API do
 
   defp request(opts) when is_list(opts) do
     req_module()
-    |> apply(:post, [opts])
+    |> Function.capture(:post, 1)
+    |> (& &1.(opts)).()
   end
 
   defp req_module do
     Application.get_env(:slack_bot_ws, __MODULE__, [])
     |> Keyword.get(:req_impl, Req)
   end
+
+  defp compute_retry_after(body, response) do
+    body
+    |> Map.get("retry_after")
+    |> select_retry_after(response)
+    |> normalize_retry_after()
+  end
+
+  defp select_retry_after(nil, response), do: header_retry_after(response)
+  defp select_retry_after(value, _response), do: value
+
+  defp header_retry_after(%{headers: headers}) when is_list(headers) do
+    Enum.find_value(headers, &retry_after_header/1)
+  end
+
+  defp header_retry_after(_), do: nil
+
+  defp retry_after_header({key, value}) when is_binary(key) do
+    if String.downcase(key) == "retry-after", do: value
+  end
+
+  defp retry_after_header(_), do: nil
+
+  defp normalize_retry_after([value | _]), do: to_integer(value, 1)
+  defp normalize_retry_after(value), do: to_integer(value, 1)
 
   defp to_integer(nil, default), do: default
   defp to_integer(value, _default) when is_binary(value), do: String.to_integer(value)

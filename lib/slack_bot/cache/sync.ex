@@ -6,8 +6,8 @@ defmodule SlackBot.Cache.Sync do
 
   use Supervisor
 
-  alias SlackBot.Cache.Sync.Users
   alias SlackBot.Cache.Sync.Channels
+  alias SlackBot.Cache.Sync.Users
   alias SlackBot.ConfigServer
 
   @type option ::

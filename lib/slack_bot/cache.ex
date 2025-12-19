@@ -227,34 +227,37 @@ defmodule SlackBot.Cache do
   end
 
   defp fetch_user_list_page(config, name_downcase, cursor) do
-    body =
-      %{"limit" => 200}
-      |> maybe_put_cursor(cursor)
+    %{"limit" => 200}
+    |> maybe_put_cursor(cursor)
+    |> fetch_user_list(config)
+    |> handle_user_list_response(config, name_downcase)
+  end
 
-    case SlackBot.push(config, {"users.list", body}) do
-      {:ok, %{"members" => members} = resp} ->
-        Enum.each(members, &cache_user(config, &1))
+  defp fetch_user_list(body, config), do: SlackBot.push(config, {"users.list", body})
 
-        case Enum.find(members, &user_name_matches?(&1, name_downcase)) do
-          nil ->
-            next_cursor =
-              resp
-              |> Map.get("response_metadata", %{})
-              |> Map.get("next_cursor", "")
+  defp handle_user_list_response({:ok, %{"members" => members} = resp}, config, name_downcase) do
+    Enum.each(members, &cache_user(config, &1))
 
-            if is_binary(next_cursor) and next_cursor != "" do
-              fetch_user_list_page(config, name_downcase, next_cursor)
-            else
-              nil
-            end
+    members
+    |> Enum.find(&user_name_matches?(&1, name_downcase))
+    |> maybe_continue_user_search(resp, config, name_downcase)
+  end
 
-          user ->
-            user
-        end
+  defp handle_user_list_response(_response, _config, _name), do: nil
 
-      _ ->
-        nil
-    end
+  defp maybe_continue_user_search(nil, resp, config, name_downcase) do
+    resp
+    |> response_next_cursor()
+    |> fetch_next_user_page(config, name_downcase)
+  end
+
+  defp maybe_continue_user_search(user, _resp, _config, _name), do: user
+
+  defp fetch_next_user_page("", _config, _name), do: nil
+  defp fetch_next_user_page(nil, _config, _name), do: nil
+
+  defp fetch_next_user_page(cursor, config, name_downcase) do
+    fetch_user_list_page(config, name_downcase, cursor)
   end
 
   defp user_name_matches?(user, target) do
@@ -303,45 +306,52 @@ defmodule SlackBot.Cache do
   end
 
   defp fetch_channel_by_name(%SlackBot.Config{} = config, target) do
-    with {:ok, bot_user_id} <- resolve_bot_user_id(config) do
-      do_fetch_channel_by_name(config, bot_user_id, target, nil)
-    else
-      _ -> nil
-    end
+    config
+    |> resolve_bot_user_id()
+    |> fetch_channel_by_name(config, target)
   end
+
+  defp fetch_channel_by_name({:ok, bot_user_id}, %SlackBot.Config{} = config, target)
+       when is_binary(bot_user_id) do
+    do_fetch_channel_by_name(config, bot_user_id, target, nil)
+  end
+
+  defp fetch_channel_by_name(_error, _config, _target), do: nil
 
   defp do_fetch_channel_by_name(config, bot_user_id, target, cursor) do
-    base_opts =
-      config.cache_sync.users_conversations_opts
-      |> Map.put("user", bot_user_id)
-
-    body = maybe_put_cursor(base_opts, cursor)
-
-    case SlackBot.push(config, {"users.conversations", body}) do
-      {:ok, %{"channels" => channels} = resp} ->
-        Enum.each(channels, &cache_channel(config, &1))
-
-        case Enum.find(channels, &channel_name_matches?(&1, target)) do
-          nil ->
-            next_cursor =
-              resp
-              |> Map.get("response_metadata", %{})
-              |> Map.get("next_cursor", "")
-
-            if is_binary(next_cursor) and next_cursor != "" do
-              do_fetch_channel_by_name(config, bot_user_id, target, next_cursor)
-            else
-              nil
-            end
-
-          channel ->
-            channel
-        end
-
-      _ ->
-        nil
-    end
+    config.cache_sync.users_conversations_opts
+    |> Map.put("user", bot_user_id)
+    |> maybe_put_cursor(cursor)
+    |> fetch_conversations(config)
+    |> handle_channel_page(config, bot_user_id, target)
   end
+
+  defp handle_channel_page({:ok, %{"channels" => channels} = resp}, config, bot_user_id, target) do
+    Enum.each(channels, &cache_channel(config, &1))
+
+    channels
+    |> Enum.find(&channel_name_matches?(&1, target))
+    |> maybe_continue_channel_search(resp, config, bot_user_id, target)
+  end
+
+  defp handle_channel_page(_response, _config, _bot_user_id, _target), do: nil
+
+  defp maybe_continue_channel_search(nil, resp, config, bot_user_id, target) do
+    resp
+    |> response_next_cursor()
+    |> fetch_next_channel_page(config, bot_user_id, target)
+  end
+
+  defp maybe_continue_channel_search(channel, _resp, _config, _bot_user_id, _target), do: channel
+
+  defp fetch_next_channel_page("", _config, _bot_user_id, _target), do: nil
+  defp fetch_next_channel_page(nil, _config, _bot_user_id, _target), do: nil
+
+  defp fetch_next_channel_page(cursor, config, bot_user_id, target) do
+    do_fetch_channel_by_name(config, bot_user_id, target, cursor)
+  end
+
+  defp fetch_conversations(body, config), do: SlackBot.push(config, {"users.conversations", body})
 
   defp cache_channel(%SlackBot.Config{} = config, %{"id" => channel_id} = channel)
        when is_binary(channel_id) do
@@ -371,6 +381,12 @@ defmodule SlackBot.Cache do
   defp channel_name_matches?(channel, target) do
     candidate = channel["name"] || channel["name_normalized"]
     is_binary(candidate) and String.downcase(candidate) == target
+  end
+
+  defp response_next_cursor(resp) do
+    resp
+    |> Map.get("response_metadata", %{})
+    |> Map.get("next_cursor", "")
   end
 
   defp maybe_put_cursor(body, nil), do: body
