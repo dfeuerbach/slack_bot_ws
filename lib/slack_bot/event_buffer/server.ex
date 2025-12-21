@@ -12,7 +12,6 @@ defmodule SlackBot.EventBuffer.Server do
 
   @impl true
   def init({adapter, adapter_opts}) do
-    Process.flag(:trap_exit, true)
     {:ok, state} = adapter.init(adapter_opts)
     {:ok, %{adapter: adapter, state: state}}
   end
@@ -25,6 +24,12 @@ defmodule SlackBot.EventBuffer.Server do
       ) do
     {status, new_state} = adapter.record(adapter_state, key, payload)
     {:reply, status, %{state | state: new_state}}
+  end
+
+  @impl true
+  def handle_call({:delete, key}, _from, %{adapter: adapter, state: adapter_state} = state) do
+    {:ok, new_state} = adapter.delete(adapter_state, key)
+    {:reply, :ok, %{state | state: new_state}}
   end
 
   @impl true

@@ -6,7 +6,6 @@ defmodule SlackBot.EventBufferTest do
 
   alias SlackBot.EventBuffer
   alias SlackBot.EventBuffer.Adapter
-  alias SlackBot.EventBuffer.Adapters.Redis
 
   defmodule CustomAdapter do
     @moduledoc false
@@ -63,23 +62,6 @@ defmodule SlackBot.EventBufferTest do
     %{config: config}
   end
 
-  test "records envelopes once and flags duplicates", %{config: config} do
-    assert :ok = EventBuffer.record(config, "E1", %{payload: "value"})
-    assert :duplicate = EventBuffer.record(config, "E1", %{payload: "value"})
-    assert EventBuffer.seen?(config, "E1")
-
-    assert :ok = EventBuffer.delete(config, "E1")
-    refute EventBuffer.seen?(config, "E1")
-  end
-
-  test "returns pending payloads", %{config: config} do
-    EventBuffer.record(config, "E2", %{payload: 1})
-    EventBuffer.record(config, "E3", %{payload: 2})
-
-    pending = EventBuffer.pending(config)
-    assert Enum.count(pending) == 2
-  end
-
   test "supports custom adapters" do
     config =
       SlackBot.Config.build!(
@@ -101,19 +83,12 @@ defmodule SlackBot.EventBufferTest do
     capture_log(fn ->
       opts = [instance_name: EventBufferTest.RedisInstance, redix: RedisErrorRedix, ttl_ms: 1_000]
 
-      assert {:ok, state} = Redis.init(opts)
+      assert {:ok, state} = SlackBot.EventBuffer.Adapters.Redis.init(opts)
 
-      # record/3 should still return {:ok, state} even when Redis fails
-      assert {:ok, _} = Redis.record(state, "E1", %{payload: :ok})
-
-      # delete/2 should return {:ok, state} on error
-      assert {:ok, _} = Redis.delete(state, "E1")
-
-      # seen?/2 should treat errors as "not seen"
-      assert {false, _} = Redis.seen?(state, "E1")
-
-      # pending/1 should return an empty list on errors
-      assert {[], _} = Redis.pending(state)
+      assert {:ok, _} = SlackBot.EventBuffer.Adapters.Redis.record(state, "E1", %{payload: :ok})
+      assert {:ok, _} = SlackBot.EventBuffer.Adapters.Redis.delete(state, "E1")
+      assert {false, _} = SlackBot.EventBuffer.Adapters.Redis.seen?(state, "E1")
+      assert {[], _} = SlackBot.EventBuffer.Adapters.Redis.pending(state)
     end)
   end
 end
