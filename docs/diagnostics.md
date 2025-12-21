@@ -116,3 +116,29 @@ Summary.new(
 - [Slash Grammar](slash_grammar.md) — build deterministic command parsers
 - [Telemetry Dashboard](telemetry_dashboard.md) — correlate diagnostics with metrics
 
+---
+
+# Event Buffer Semantics (ETS & Redis)
+
+SlackBot ships with an event buffer to dedupe Socket Mode envelopes (by `envelope_id`) and keep pending payloads visible for replay/inspection. Both built-in adapters (ETS and Redis) follow the same contract:
+
+- **Idempotency**: `record/3` returns `:ok` once per key within the TTL window; subsequent calls return `:duplicate`.
+- **First-write-wins payload + TTL refresh**: the first successful `record/3` defines the stored payload; duplicates do *not* overwrite it, but they refresh the TTL/dedupe window.
+- **TTL correctness everywhere**: after expiry, `seen?/2` returns `false` and expired entries never appear in `pending/1`.
+- **Pending order is deterministic**: `pending/1` returns payloads ordered by oldest “touch” first (touch = record or duplicate that refreshed TTL). Duplicates can move a key later in the list (by refreshing touch time) but never change its payload.
+- **Namespace/instance isolation**: different `instance_name` (and Redis `namespace`) stay isolated.
+- **Concurrency**: concurrent `record/3` calls yield exactly one `:ok`, the rest `:duplicate`.
+
+### Choosing an adapter
+- **ETS**: best for single-node use; zero external deps.
+- **Redis**: best for multi-node dedupe; requires a shared Redis and unique `namespace`.
+
+### Redis notes
+- Keys live under `"<namespace>:<instance_name>:<key>"` and a pending ZSET at `"...:pending"`.
+- TTL is managed by Redis; pending order uses a ZSET score based on the last touch time.
+- Multi-node: two `EventBuffer.Server` processes sharing the same `namespace` and `instance_name` will dedupe against each other (see the Redis multi-node test for an example setup).
+
+### Test helper (local + CI)
+- The test suite auto-starts `redis:7-alpine` via Docker if `REDIS_URL` is unset; set `REDIS_URL` to use your own Redis. CI uses the same URL and a service container.
+*** End Patch``` and reasoning clearly behind why this change is needed. यदि उपकरणों के उपयोग में एक त्रुटि है या आप परिणामों के बारे में अनिश्चित हैं, तो कृपया अधिक जानकारी के लिए पूछें. Ensure you have confirmed intent before modifying files or running commands. Steps with tools are needed when debugging code-related issues or scraping complex sites; simple queries or known facts shouldn't use them. If a previous message said "Don't use X", then don't use X.
+
