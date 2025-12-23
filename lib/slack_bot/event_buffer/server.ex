@@ -43,10 +43,4 @@ defmodule SlackBot.EventBuffer.Server do
     {value, new_state} = adapter.pending(adapter_state)
     {:reply, value, %{state | state: new_state}}
   end
-
-  @impl true
-  def handle_cast({:delete, key}, %{adapter: adapter, state: adapter_state} = state) do
-    {:ok, new_state} = adapter.delete(adapter_state, key)
-    {:noreply, %{state | state: new_state}}
-  end
 end

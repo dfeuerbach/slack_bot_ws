@@ -96,7 +96,7 @@ defmodule SlackBot.EventBufferRedisMultiNodeTest do
     server_b: server_b
   } do
     assert :ok = GenServer.call(server_a, {:record, "k3", %{p: :shared}})
-    GenServer.cast(server_a, {:delete, "k3"})
+    assert :ok = GenServer.call(server_a, {:delete, "k3"})
     Process.sleep(50)
     refute GenServer.call(server_b, {:seen?, "k3"})
   end
