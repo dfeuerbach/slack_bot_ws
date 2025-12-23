@@ -12,7 +12,6 @@ defmodule SlackBot.EventBuffer.Server do
 
   @impl true
   def init({adapter, adapter_opts}) do
-    Process.flag(:trap_exit, true)
     {:ok, state} = adapter.init(adapter_opts)
     {:ok, %{adapter: adapter, state: state}}
   end
@@ -28,6 +27,12 @@ defmodule SlackBot.EventBuffer.Server do
   end
 
   @impl true
+  def handle_call({:delete, key}, _from, %{adapter: adapter, state: adapter_state} = state) do
+    {:ok, new_state} = adapter.delete(adapter_state, key)
+    {:reply, :ok, %{state | state: new_state}}
+  end
+
+  @impl true
   def handle_call({:seen?, key}, _from, %{adapter: adapter, state: adapter_state} = state) do
     {value, new_state} = adapter.seen?(adapter_state, key)
     {:reply, value, %{state | state: new_state}}
@@ -37,11 +42,5 @@ defmodule SlackBot.EventBuffer.Server do
   def handle_call(:pending, _from, %{adapter: adapter, state: adapter_state} = state) do
     {value, new_state} = adapter.pending(adapter_state)
     {:reply, value, %{state | state: new_state}}
-  end
-
-  @impl true
-  def handle_cast({:delete, key}, %{adapter: adapter, state: adapter_state} = state) do
-    {:ok, new_state} = adapter.delete(adapter_state, key)
-    {:noreply, %{state | state: new_state}}
   end
 end

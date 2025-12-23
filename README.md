@@ -389,6 +389,15 @@ mix format
 
 `SlackBot.TestTransport` and `SlackBot.TestHTTP` in `lib/slack_bot/testing/` let you simulate Socket Mode traffic and stub Web API calls without hitting Slack.
 
+### Live Redis tests
+
+`mix test` now exercises the Redis event buffer adapter against a live Redis instance:
+
+- If `REDIS_URL` is unset, the suite attempts to connect to `redis://localhost:6379/0`. When Redis is unavailable, it automatically runs `docker run -d --name slackbot-ws-test-redis -p 6379:6379 redis:7-alpine` and waits for the container to become healthy.
+- Provide your own Redis by exporting `REDIS_URL=redis://host:port/db`. When this variable is present the helper will **not** touch Docker; tests will fail fast if the URL is unreachable.
+- To stop the auto-managed container manually, run `docker stop slackbot-ws-test-redis`. The helper also removes stale containers before starting new ones and registers an `at_exit` callback so the container stops when the suite finishes.
+- GitHub Actions uses the same `REDIS_URL` and runs a dedicated Redis service container, so CI mirrors local behavior.
+
 ## Contributing
 
 1. Fork the repository

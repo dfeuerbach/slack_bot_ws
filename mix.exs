@@ -90,6 +90,6 @@ defmodule SlackBot.MixProject do
   end
 
   defp elixirc_paths(:dev), do: ["lib", "examples/basic_bot/lib"]
-  defp elixirc_paths(:test), do: ["lib", "examples/basic_bot/lib"]
+  defp elixirc_paths(:test), do: ["lib", "examples/basic_bot/lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 end

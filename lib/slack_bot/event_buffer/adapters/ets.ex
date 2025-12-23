@@ -22,11 +22,20 @@ defmodule SlackBot.EventBuffer.Adapters.ETS do
 
     entry = %{payload: payload, recorded_at: now_ms()}
 
-    if :ets.insert_new(state.table, {key, entry}) do
-      {:ok, state}
-    else
-      :ets.insert(state.table, {key, entry})
-      {:duplicate, state}
+    case :ets.insert_new(state.table, {key, entry}) do
+      true ->
+        {:ok, state}
+
+      false ->
+        case :ets.lookup(state.table, key) do
+          [{^key, %{payload: existing_payload}}] ->
+            :ets.insert(state.table, {key, %{payload: existing_payload, recorded_at: now_ms()}})
+            {:duplicate, state}
+
+          [] ->
+            :ets.insert(state.table, {key, entry})
+            {:ok, state}
+        end
     end
   end
 
@@ -38,13 +47,18 @@ defmodule SlackBot.EventBuffer.Adapters.ETS do
 
   @impl true
   def seen?(state, key) do
-    {value, new_state} =
-      case :ets.lookup(state.table, key) do
-        [{^key, _}] -> {true, state}
-        [] -> {false, state}
-      end
+    case :ets.lookup(state.table, key) do
+      [{^key, %{recorded_at: recorded_at}}] ->
+        if expired?(state, recorded_at) do
+          :ets.delete(state.table, key)
+          {false, state}
+        else
+          {true, state}
+        end
 
-    {value, new_state}
+      [] ->
+        {false, state}
+    end
   end
 
   @impl true
@@ -52,8 +66,13 @@ defmodule SlackBot.EventBuffer.Adapters.ETS do
     clean_expired(state)
 
     entries =
-      :ets.tab2list(state.table)
-      |> Enum.map(fn {_key, %{payload: payload}} -> payload end)
+      state.table
+      |> :ets.tab2list()
+      |> Enum.map(fn {_key, %{payload: payload, recorded_at: recorded_at}} ->
+        {recorded_at, payload}
+      end)
+      |> Enum.sort_by(fn {recorded_at, _payload} -> recorded_at end)
+      |> Enum.map(fn {_recorded_at, payload} -> payload end)
 
     {entries, state}
   end
@@ -72,6 +91,12 @@ defmodule SlackBot.EventBuffer.Adapters.ETS do
   end
 
   defp clean_expired(state), do: state
+
+  defp expired?(%{ttl_ms: ttl}, recorded_at) when is_integer(ttl) and ttl > 0 do
+    now_ms() - recorded_at > ttl
+  end
+
+  defp expired?(_state, _recorded_at), do: false
 
   defp now_ms, do: System.monotonic_time(:millisecond)
 end

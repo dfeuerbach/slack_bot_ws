@@ -25,6 +25,10 @@ SlackBot emits Telemetry events across its internal systems—connection lifecyc
 | `[:slackbot, :ack, :http]` | `%{duration: native}` | `%{status: :ok \| :error \| :unknown \| :exception}` |
 | `[:slackbot, :diagnostics, :record]` | `%{count: 1}` | `%{direction: :inbound \| :outbound}` |
 | `[:slackbot, :diagnostics, :replay]` | `%{count: integer}` | `%{filters: map()}` |
+| `[:slackbot, :event_buffer, :record]` | `%{result: :ok \| :duplicate}` | `%{key: String.t() \| nil, result: :ok \| :duplicate}` |
+| `[:slackbot, :event_buffer, :delete]` | `%{count: 0 \| 1}` | `%{key: String.t() \| nil, key_present?: boolean()}` |
+| `[:slackbot, :event_buffer, :seen]` | `%{count: 1}` | `%{key: String.t() \| nil, seen?: boolean()}` |
+| `[:slackbot, :event_buffer, :pending]` | `%{count: integer}` | `%{count: integer}` |
 
 All event names are prefixed with your configured `telemetry_prefix`
 (`[:slackbot]` by default), so a handler will actually receive

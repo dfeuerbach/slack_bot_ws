@@ -1,3 +1,5 @@
+SlackBot.TestRedis.ensure!()
+
 ExUnit.start()
 
 defmodule SlackBot.TestHandler do
