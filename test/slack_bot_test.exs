@@ -96,5 +96,15 @@ defmodule SlackBotTest do
 
       assert {:ok, %{"text" => "async payload"}} = Task.await(task)
     end
+
+    test "emit supports config structs" do
+      start_supervised!(SlackBot.InstanceHelperBot)
+      assert_receive {:test_transport, _pid}
+
+      config = SlackBot.InstanceHelperBot.config()
+      :ok = SlackBot.emit(config, {"message", %{"text" => "from config"}})
+
+      assert_receive {:handled, "message", %{"text" => "from config"}, _ctx}
+    end
   end
 end

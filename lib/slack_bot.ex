@@ -467,10 +467,18 @@ defmodule SlackBot do
   - `SlackBot.Diagnostics.replay/2` - Replay captured events
   - Your `handle_event` declarations in your bot module
   """
-  @spec emit(GenServer.server(), {String.t(), map()}) :: :ok
+  @spec emit(Config.t() | GenServer.server(), {String.t(), map()}) :: :ok
+  def emit(%Config{} = config, {type, payload}) when is_binary(type) and is_map(payload) do
+    server = config.instance_name || config.module
+    do_emit(config, server, type, payload)
+  end
+
   def emit(server, {type, payload}) when is_binary(type) and is_map(payload) do
     config = config(server)
+    do_emit(config, server, type, payload)
+  end
 
+  defp do_emit(config, server, type, payload) do
     Diagnostics.record(config, :outbound, %{
       type: type,
       payload: payload,
