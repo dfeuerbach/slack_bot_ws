@@ -14,10 +14,12 @@ defmodule SlackBot.MixProject do
       package: package(),
       deps: deps(),
       docs: [
-        main: "readme",
+        main: "intro",
         source_ref: "v0.1.0-rc.2",
         source_url: "https://github.com/dfeuerbach/slack_bot_ws",
+        logo: "docs/images/slackbot_logo_sm.png",
         extras: [
+          "docs/intro.md",
           "README.md",
           "docs/getting_started.md",
           "docs/rate_limiting.md",

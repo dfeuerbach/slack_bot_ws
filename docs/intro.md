@@ -1,10 +1,5 @@
 # SlackBot WS
 
-[![CI](https://github.com/dfeuerbach/slack_bot_ws/actions/workflows/ci.yml/badge.svg)](https://github.com/dfeuerbach/slack_bot_ws/actions/workflows/ci.yml)
-[![Hex.pm](https://img.shields.io/hexpm/v/slack_bot_ws.svg)](https://hex.pm/packages/slack_bot_ws)
-[![Documentation](https://img.shields.io/badge/hex-docs-purple.svg)](https://hexdocs.pm/slack_bot_ws/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
 SlackBot WS (**W**eb**S**ocket) is a production-ready Slack bot framework for Elixir built for Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/). It gives you a supervised WebSocket connection, Slack's API tier rate limiting, an elegant slash-command parsing DSL, Plug-like middleware, and comprehensive Telemetry coverage. All the typical side-mission complexity that pulls you away from just building features is eliminated.
 
 Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/) shines when you need real-time event delivery without a public HTTP endpoint: laptops, firewalled environments, or stacks where inbound webhooks are undesirable. Persistent connections keep latency low, interactive payloads flowing, and local development simple. Socket Mode is fantastic for internal, private bots within an organization; it's not for Slack's public marketplace, where you'd advertise your application to other Slack organizations.
