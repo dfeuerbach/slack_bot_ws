@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+- _Nothing yet_
+
+## [0.1.0-rc.2] - 2025-12-25
+
 ### Added
 - `use SlackBot, otp_app: ...` now injects instance helper functions (`push/1`, `push_async/1`, `emit/1`, `config/0`) so downstream code can call `MyApp.SlackBot.push({...})` without repeating the module name at every callsite.
 - Expanded `SlackBot.TierRegistry` defaults to cover Slack's published tier list (including special cases like `chat.postMessage`) along with regression tests.
@@ -23,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking
 - Removed the implicit `SlackBot.*/*` arities that defaulted to the `SlackBot` module. Call `MyBot.push/1`, `MyBot.push_async/1`, `MyBot.emit/1`, or `MyBot.config/0` (the injected helpers), or keep using the explicit forms (`SlackBot.push(bot, request)`, etc.) when supervising bots under custom names.
+
 ### Fixed
 - Suppressed optional Igniter and Rewrite module warnings in `mix slack_bot_ws.install` when those helper dependencies are not present.
 - Avoid blocking the users cache sync worker during Slack rate limits by scheduling retries instead of sleeping.
