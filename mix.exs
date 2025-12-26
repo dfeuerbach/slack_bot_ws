@@ -73,8 +73,8 @@ defmodule SlackBot.MixProject do
 
   defp description do
     """
-    Production-ready Slack bot framework for Socket Mode. Tier-aware rate limiting, \
-    deterministic slash-command parsing, and full observability—out of the box.
+    A framework that solves the complexity of Slack bots—reconnects, backoff, tiered \
+    rate limits, slash-command and chat parsing—so you can build the fun bits.
     """
   end
 
