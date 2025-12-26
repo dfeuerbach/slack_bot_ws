@@ -16,7 +16,7 @@ Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/)
 - **Observability & diagnostics** — telemetry spans, optional telemetry stats, diagnostics ring buffer with replay, and LiveDashboard-ready metrics.
 - **Production defaults out of the box** — add tokens, supervise the module, and you have heartbeats, backoff, and rate limiting without touching config.
 
-> **New to Slack bots?** The [Getting Started guide](docs/getting_started.md) walks through creating a Slack App, enabling Socket Mode, obtaining tokens, and running your first handler.
+> **New to Slack bots?** The [Getting Started guide](getting_started.md) walks through creating a Slack App, enabling Socket Mode, obtaining tokens, and running your first handler.
 
 ## See it in action
 
@@ -49,7 +49,7 @@ end
 | `/deploy api` | `%{service: "api"}` |
 | `/deploy api canary env staging env prod` | `%{service: "api", canary?: true, envs: ["staging", "prod"]}` |
 
-See the [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
+See the [Slash Grammar Guide](slash_grammar.md) for the full macro reference.
 
 ### Plug-like middleware pipeline
 
@@ -265,7 +265,7 @@ config :slack_bot_ws, SlackBot.TierRegistry,
 
 SlackBot ships with default specs for every Slack Web API method listed in the published tier tables (including special cases like `chat.postMessage`). Overrides are only necessary when Slack revises quotas or when custom grouping is desired.
 
-See [Rate Limiting Guide](docs/rate_limiting.md) for a full explanation of how tier-aware limiting works and how to tune it.
+See [Rate Limiting Guide](rate_limiting.md) for a full explanation of how tier-aware limiting works and how to tune it.
 
 ### Slash-command acknowledgements
 
@@ -281,7 +281,7 @@ ack_mode: {:custom, &MyApp.custom_ack/2}
 diagnostics: [enabled: true, buffer_size: 300]
 ```
 
-When enabled, SlackBot captures inbound/outbound frames. See [Diagnostics Guide](docs/diagnostics.md) for IEx workflows and replay.
+When enabled, SlackBot captures inbound/outbound frames. See [Diagnostics Guide](diagnostics.md) for IEx workflows and replay.
 
 ### Metadata cache & background sync
 
@@ -352,7 +352,7 @@ end
 | `/deploy api` | `%{service: "api"}` |
 | `/deploy api canary env staging env prod` | `%{service: "api", canary?: true, envs: ["staging", "prod"]}` |
 
-See [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
+See [Slash Grammar Guide](slash_grammar.md) for the full macro reference.
 
 ## Web API Helpers
 
@@ -375,7 +375,7 @@ iex> SlackBot.Diagnostics.replay(MyApp.SlackBot, types: ["slash_commands"])
 {:ok, 3}
 ```
 
-Replay feeds events back through your handlers—useful for reproducing production issues locally. See [Diagnostics Guide](docs/diagnostics.md).
+Replay feeds events back through your handlers—useful for reproducing production issues locally. See [Diagnostics Guide](diagnostics.md).
 
 ## Telemetry & LiveDashboard
 
@@ -392,7 +392,7 @@ SlackBot emits events for connection state, handler execution, rate limiting, an
 )
 ```
 
-See [Telemetry Guide](docs/telemetry_dashboard.md) for metric definitions and LiveDashboard wiring.
+See [Telemetry Guide](telemetry_dashboard.md) for metric definitions and LiveDashboard wiring.
 
 ## Example Bot
 
@@ -408,11 +408,11 @@ Follow the README inside that folder to run it against a Slack dev workspace.
 
 ## Guides
 
-- [Getting Started](docs/getting_started.md) — from Slack App creation to first slash command
-- [Rate Limiting](docs/rate_limiting.md) — how tier-aware limiting works
-- [Slash Grammar](docs/slash_grammar.md) — declarative command parsing
-- [Diagnostics](docs/diagnostics.md) — ring buffer and replay workflows
-- [Telemetry Dashboard](docs/telemetry_dashboard.md) — LiveDashboard integration
+- [Getting Started](getting_started.md) — from Slack App creation to first slash command
+- [Rate Limiting](rate_limiting.md) — how tier-aware limiting works
+- [Slash Grammar](slash_grammar.md) — declarative command parsing
+- [Diagnostics](diagnostics.md) — ring buffer and replay workflows
+- [Telemetry Dashboard](telemetry_dashboard.md) — LiveDashboard integration
 
 ## Development
 

@@ -89,7 +89,7 @@ defmodule SlackBot.MixProject do
         "Changelog" => "https://github.com/dfeuerbach/slack_bot_ws/blob/master/CHANGELOG.md"
       },
       files:
-        ~w(lib mix.exs README.md LICENSE CHANGELOG.md AGENTS.md docs/diagnostics.md docs/getting_started.md docs/rate_limiting.md docs/releasing.md docs/slackbot_design.md docs/slash_grammar.md docs/telemetry_dashboard.md)
+        ~w(lib mix.exs README.md LICENSE CHANGELOG.md AGENTS.md docs/intro.md docs/diagnostics.md docs/getting_started.md docs/rate_limiting.md docs/releasing.md docs/slackbot_design.md docs/slash_grammar.md docs/telemetry_dashboard.md docs/images/slackbot_logo_sm.png)
     ]
   end
 
