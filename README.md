@@ -7,15 +7,11 @@
 
 ![SlackBot WS](docs/images/slack_bot_ws_logo.png)
 
-> Reconnects. Backoff. Heartbeats. Per-method rate limits. Traffic shaping. SlackBot WS handles all of it—so you can ship the bot instead of babysitting Slack's complexity.
-
 SlackBot is a production-ready Slack bot framework for Elixir built for Slack's [Socket Mode](https://docs.slack.dev/apis/events-api/using-socket-mode/). It gives you a supervised WebSocket connection, tier-aware rate limiting, deterministic slash-command parsing via a compile-time grammar DSL, Plug-like middleware, and full Telemetry coverage.
 
 Socket Mode shines when you need real-time event delivery without a public HTTP endpoint: laptops, firewalled environments, or stacks where inbound webhooks are undesirable. Persistent connections keep latency low, interactive payloads flowing, and local development simple.
 
-**Ready to build?** [GitHub](https://github.com/dfeuerbach/slack_bot_ws) • [Hex](https://hex.pm/packages/slack_bot_ws) • [Docs](https://hexdocs.pm/slack_bot_ws/)
-
-## Why SlackBot WS?
+## Highlights
 
 - **Resilient Socket Mode connection** — supervised transport handles backoff, jittered retries, dedupe, heartbeats, and HTTP-based health checks (`auth.test`) so your bot stays online.
 - **Tier-aware rate limiting** — per-channel and per-workspace shaping plus Slack's published tier quotas are enforced automatically; override the registry when you need custom allowances.

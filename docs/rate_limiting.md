@@ -10,7 +10,7 @@ SlackBot handles rate limiting automatically through two complementary layers:
 
 ## Rate limiter (“burst” protection)
 
-Every outbound Web API call goes through `SlackBot.RateLimiter` by default. The rate limiter keeps a queue per “key” (per-channel for chat-style methods, per-workspace for others) and gates entry so you never run more than one request per key when Slack’s rules would reject you anyway (e.g., Slack’s 1 message/second/channel policy). If Slack responds with `429` and a `Retry-After`, the limiter suspends that key for the specified duration before draining the queue.
+Every outbound Web API call goes through the built-in rate limiter by default. It keeps a queue per “key” (per-channel for chat-style methods, per-workspace for others) and gates entry so you never run more than one request per key when Slack’s rules would reject you anyway (e.g., Slack’s 1 message/second/channel policy). If Slack responds with `429` and a `Retry-After`, the limiter suspends that key for the specified duration before draining the queue.
 
 You can observe back pressure by subscribing to the built-in telemetry:
 
@@ -21,11 +21,11 @@ These events can be fed into `Telemetry.Metrics` (e.g., `last_value` or `distrib
 
 Because the rate limiter is enforcing Slack’s pacing rules, it does not have its own timeout; the `GenServer.call/3` inside `around_request/4` uses `:infinity` so requests will sit in the queue until Slack allows them to proceed. If you need a client-side timeout, wrap your `MyBot.push/1` call (or the explicit `SlackBot.push(bot, ...)`) in your own `Task.async/await` with a timeout and cancel the task if you can’t wait.
 
-The limiter also guarantees that slots are released even if your code raises, throws, or exits. `SlackBot.RateLimiter.around_request/4` wraps each call in a `try/rescue/catch` so the `{:after_request, ...}` bookkeeping message is delivered no matter how the user function finishes.
+The limiter also guarantees that slots are released even if your code raises, throws, or exits. Each request is wrapped in a `try/rescue/catch` so the `{:after_request, ...}` bookkeeping message is delivered no matter how the user function finishes.
 
 ## Tier-based quotas
 
-Slack groups Web API methods into “tiers” (1–4 plus a few special buckets) that define how many calls per minute you can make per workspace. SlackBot encodes those quotas in `SlackBot.TierRegistry`: each method maps to a spec with `max_calls`, `window_ms`, `scope`, optional `group` sharing, and (for “special” cases like `chat.postMessage`) a reasonable default based on Slack’s docs. The tier limiter tracks each spec independently and queues requests so you don’t exceed the published budget.
+Slack groups Web API methods into “tiers” (1–4 plus a few special buckets) that define how many calls per minute you can make per workspace. SlackBot ships with a tier registry that encodes those quotas: each method maps to a spec with `max_calls`, `window_ms`, `scope`, optional `group` sharing, and (for “special” cases like `chat.postMessage`) a reasonable default based on Slack’s docs. The tier limiter tracks each spec independently and queues requests so you don’t exceed the published budget.
 
 You typically don’t need to configure this at all. If Slack updates their quotas or if you have an alternative agreed-upon allotment, you can override entries via:
 

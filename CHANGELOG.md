@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `use SlackBot, otp_app: ...` now injects instance helper functions (`push/1`, `push_async/1`, `emit/1`, `config/0`) so downstream code can call `MyApp.SlackBot.push({...})` without repeating the module name at every callsite.
-- Expanded `SlackBot.TierRegistry` defaults to cover Slack's published tier list (including special cases like `chat.postMessage`) along with regression tests.
+- Expanded the built-in tier registry defaults to cover Slack's published tier list (including special cases like `chat.postMessage`) along with regression tests.
 - Redis-backed event buffer conformance harness that exercises every adapter scenario (ETS + Redis) plus multi-node Redis coverage.
 - Live Redis test helper that auto-starts `redis:7-alpine` for `mix test` and mirrors the GitHub Actions Redis service setup.
 

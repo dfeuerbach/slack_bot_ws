@@ -140,5 +140,3 @@ SlackBot ships with an event buffer to dedupe Socket Mode envelopes (by `envelop
 
 ### Test helper (local + CI)
 - The test suite auto-starts `redis:7-alpine` via Docker if `REDIS_URL` is unset; set `REDIS_URL` to use your own Redis. CI uses the same URL and a service container.
-*** End Patch``` and reasoning clearly behind why this change is needed. यदि उपकरणों के उपयोग में एक त्रुटि है या आप परिणामों के बारे में अनिश्चित हैं, तो कृपया अधिक जानकारी के लिए पूछें. Ensure you have confirmed intent before modifying files or running commands. Steps with tools are needed when debugging code-related issues or scraping complex sites; simple queries or known facts shouldn't use them. If a previous message said "Don't use X", then don't use X.
-
