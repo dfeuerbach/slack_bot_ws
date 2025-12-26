@@ -200,10 +200,6 @@ defmodule SlackBot.TestRedis do
     ]
   end
 
-  defp uri_to_redix_opts(_other) do
-    [host: "localhost", port: 6379]
-  end
-
   defp parse_database(nil), do: nil
 
   defp parse_database(path) when path in ["", "/"], do: nil
