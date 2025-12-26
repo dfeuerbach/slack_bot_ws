@@ -209,6 +209,17 @@ SlackBot.push(:team_alpha_bot, {"chat.postMessage", %{"channel" => "C123", "text
 
 Avoid mixing the module helpers in this scenario—the helpers assume the supervised process is registered under the module name. Pick one style per instance so the codebase stays predictable.
 
+Background jobs and tooling can also pass a `%SlackBot.Config{}` directly when they already have one on
+hand:
+
+```elixir
+config = SlackBot.config(MyApp.SlackBot)
+SlackBot.emit(config, {"daily_digest", %{"channels" => ["C123"]}})
+```
+
+Use this sparingly (for example telemetry probes or test helpers) and prefer the module helpers inside
+your application code.
+
 ## Advanced Configuration
 
 Every option below is optional—omit them and SlackBot uses production-ready defaults.
@@ -360,7 +371,10 @@ See [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
 - `MyApp.SlackBot.push_async/1` — fire-and-forget under the managed Task.Supervisor
 - `SlackBot.push/2` and `SlackBot.push_async/2` remain available when you need to target a dynamically named instance.
 
-Both variants route through the rate limiter and Telemetry pipeline automatically.
+Both variants route through the rate limiter and Telemetry pipeline automatically. Reach for the explicit
+`SlackBot.*` forms when you start bots under dynamic names (multi-tenant supervisors, `{:via, ...}` tuples) or
+when you're operating on a cached `%SlackBot.Config{}` outside the router (for example a background job or probe).
+The module-scoped helpers stay the recommended default for static otp_app bots.
 
 ## Diagnostics & Replay
 

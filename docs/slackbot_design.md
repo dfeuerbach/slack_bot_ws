@@ -27,6 +27,11 @@
   - `MyBot.config()` / `SlackBot.config(bot)` – read the immutable `%SlackBot.Config{}` for an instance.
   - `SlackBot.test_transport/1` – instrumentation-friendly fake transport for unit tests.
 
+The `MyBot.*` helpers are the recommended default for otp_app bots. Fall back to the explicit `SlackBot.*`
+variants when you supervise multiple instances of the same router under dynamic names (for example
+multi-tenant workspaces) or when infrastructure code already has a `%SlackBot.Config{}` in hand and needs to
+issue API calls outside the router context.
+
 > Configuration is immutable after boot. Update the application environment and
 > restart the `SlackBot` supervisor (or your enclosing app) to apply changes.
 

@@ -56,7 +56,7 @@ non-obvious rules so that automated changes remain idiomatic and safe.
   - `MyBot.push_async({method, body})` for async Web API work.
   - `MyBot.emit({type, payload})` to inject synthetic events.
   - `MyBot.config()` to read immutable configuration.
-- Use the `SlackBot.*(bot, ...)` forms only when you cannot rely on the module name (for example dynamic supervisors with custom `:name`).
+- Use the `SlackBot.*(bot, ...)` forms when supervising instances under dynamic names (multi-tenant workspaces, `{:via, ...}`) or when infrastructure code already holds a `%SlackBot.Config{}` and needs to issue API calls outside the router.
 
 - Avoid calling internal modules like `SlackBot.API`, `SlackBot.ConnectionManager`,
   `SlackBot.ConfigServer`, or adapter modules directly from application code unless
