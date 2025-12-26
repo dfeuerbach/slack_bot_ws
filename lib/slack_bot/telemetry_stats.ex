@@ -50,7 +50,7 @@ defmodule SlackBot.TelemetryStats do
         snapshot = SlackBot.TelemetryStats.snapshot(MyBot)
         metrics = format_metrics(snapshot)
 
-        SlackBot.push(MyBot, {"chat.postMessage", %{
+        MyBot.push({"chat.postMessage", %{
           channel: channel_id,
           text: "Bot health report",
           blocks: metrics

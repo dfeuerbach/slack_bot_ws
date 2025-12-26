@@ -4,7 +4,7 @@ Slack imposes rate limits on Web API calls to protect its infrastructure and ens
 
 SlackBot handles rate limiting automatically through two complementary layers:
 
-1. **Rate limiter** – Shapes bursts on a per-channel (for the “chat.*” family) or per-workspace basis so you don’t overrun Slack’s immediate-rate guardrails. This is the component invoked before each Web API call via `SlackBot.push/2` or `SlackBot.push_async/2`.
+1. **Rate limiter** – Shapes bursts on a per-channel (for the “chat.*” family) or per-workspace basis so you don’t overrun Slack’s immediate-rate guardrails. This is the component invoked before each Web API call via `MyBot.push/1` (or `SlackBot.push(bot, request)`) and `MyBot.push_async/1`.
 
 2. **Tier limiter** – Tracks Slack’s published per-method quotas (Tier 1–4 + special tiers) and queues requests so you honor the longer-term limits documented in [Slack’s API rate guide](https://docs.slack.dev/apis/web-api/rate-limits).
 
@@ -19,7 +19,7 @@ You can observe back pressure by subscribing to the built-in telemetry:
 
 These events can be fed into `Telemetry.Metrics` (e.g., `last_value` or `distribution`) to derive average queue depths or to detect when Slack is throttling a key.
 
-Because the rate limiter is enforcing Slack’s pacing rules, it does not have its own timeout; the `GenServer.call/3` inside `around_request/4` uses `:infinity` so requests will sit in the queue until Slack allows them to proceed. If you need a client-side timeout, wrap your `SlackBot.push/2` call in your own `Task.async/await` with a timeout and cancel the task if you can’t wait.
+Because the rate limiter is enforcing Slack’s pacing rules, it does not have its own timeout; the `GenServer.call/3` inside `around_request/4` uses `:infinity` so requests will sit in the queue until Slack allows them to proceed. If you need a client-side timeout, wrap your `MyBot.push/1` call (or the explicit `SlackBot.push(bot, ...)`) in your own `Task.async/await` with a timeout and cancel the task if you can’t wait.
 
 The limiter also guarantees that slots are released even if your code raises, throws, or exits. `SlackBot.RateLimiter.around_request/4` wraps each call in a `try/rescue/catch` so the `{:after_request, ...}` bookkeeping message is delivered no matter how the user function finishes.
 

@@ -98,7 +98,7 @@ defmodule MyApp.SlackBot do
   use SlackBot, otp_app: :my_app
 
   handle_event "app_mention", event, _ctx do
-    SlackBot.push({"chat.postMessage", %{
+    MyApp.SlackBot.push({"chat.postMessage", %{
       "channel" => event["channel"],
       "text" => "Hi <@#{event["user"]}>!"
     }})
@@ -106,8 +106,8 @@ defmodule MyApp.SlackBot do
 end
 ```
 
-- `SlackBot.push/2` is synchronous and waits for Slack's response via the managed HTTP pool, telemetry pipeline, and rate limiter.
-- `SlackBot.push_async/2` is fire-and-forget under the supervised Task pipeline—perfect for long-running replies or batched API work.
+- `MyApp.SlackBot.push/1` is synchronous and waits for Slack's response via the managed HTTP pool, telemetry pipeline, and rate limiter.
+- `MyApp.SlackBot.push_async/1` is fire-and-forget under the supervised Task pipeline—perfect for long-running replies or batched API work.
 
 ## Quick Start
 
@@ -138,7 +138,7 @@ defmodule MyApp.SlackBot do
   use SlackBot, otp_app: :my_app
 
   handle_event "message", event, _ctx do
-    SlackBot.push({"chat.postMessage", %{
+    MyApp.SlackBot.push({"chat.postMessage", %{
       "channel" => event["channel"],
       "text" => "Hello from MyApp.SlackBot!"
     }})
@@ -152,7 +152,7 @@ end
 - `handle_event/3` pattern-matches on Slack event types. The first argument (`"message"`) is the event type to match.
 - `event` is the raw payload map from Slack—it contains fields like `"channel"`, `"user"`, `"text"`, and `"ts"` depending on the event type. You destructure what you need.
 - `ctx` is the per-event context struct carrying the telemetry prefix, assigns (custom data you configure), and HTTP client. We mark it `_ctx` here because this simple example doesn't use it, but middleware and more complex handlers often pass data through `ctx.assigns`.
-- `SlackBot.push/2` sends Web API requests through the managed rate limiter, Telemetry pipeline, and HTTP pool. It returns `{:ok, response}` or `{:error, reason}`.
+- `MyApp.SlackBot.push/1` sends Web API requests through the managed rate limiter, Telemetry pipeline, and HTTP pool. It returns `{:ok, response}` or `{:error, reason}`.
 
 ### 3. Configure tokens
 
@@ -175,6 +175,39 @@ Supervisor.start_link(children, strategy: :one_for_one)
 ```
 
 That's it. SlackBot boots a Socket Mode connection with ETS-backed cache and event buffer, per-workspace/per-channel rate limiting, and default backoff/heartbeat settings. When you're ready to tune behavior, read on.
+
+## Multiple bots and instances
+
+The ergonomic path is **one module per bot** using the `otp_app` pattern. Each module gets its own `push/1`, `push_async/1`, `emit/1`, and `config/0` helpers so you always call the right instance:
+
+```elixir
+defmodule MyApp.CustomerSuccessBot do
+  use SlackBot, otp_app: :my_app
+end
+
+defmodule MyApp.IncidentBot do
+  use SlackBot, otp_app: :my_app
+end
+
+children = [
+  MyApp.CustomerSuccessBot,
+  MyApp.IncidentBot
+]
+Supervisor.start_link(children, strategy: :one_for_one)
+```
+
+Need distinct runtime instances of the **same** router module (for example, dynamically named bots per workspace)? Start `SlackBot` directly with an explicit `:name` and call the explicit APIs:
+
+```elixir
+children = [
+  {SlackBot, name: :team_alpha_bot, module: MyApp.DynamicRouter, app_token: ..., bot_token: ...},
+  {SlackBot, name: :team_beta_bot, module: MyApp.DynamicRouter, app_token: ..., bot_token: ...}
+]
+
+SlackBot.push(:team_alpha_bot, {"chat.postMessage", %{"channel" => "C123", "text" => "hi"}})
+```
+
+Avoid mixing the module helpers in this scenario—the helpers assume the supervised process is registered under the module name. Pick one style per instance so the codebase stays predictable.
 
 ## Advanced Configuration
 
@@ -323,10 +356,11 @@ See [Slash Grammar Guide](docs/slash_grammar.md) for the full macro reference.
 
 ## Web API Helpers
 
-- `SlackBot.push/2` — synchronous; waits for Slack's response
-- `SlackBot.push_async/2` — fire-and-forget under the managed Task.Supervisor
+- `MyApp.SlackBot.push/1` — synchronous; waits for Slack's response
+- `MyApp.SlackBot.push_async/1` — fire-and-forget under the managed Task.Supervisor
+- `SlackBot.push/2` and `SlackBot.push_async/2` remain available when you need to target a dynamically named instance.
 
-Both route through the rate limiter and Telemetry pipeline automatically.
+Both variants route through the rate limiter and Telemetry pipeline automatically.
 
 ## Diagnostics & Replay
 

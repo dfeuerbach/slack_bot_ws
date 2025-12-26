@@ -8,16 +8,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `use SlackBot, otp_app: ...` now injects instance helper functions (`push/1`, `push_async/1`, `emit/1`, `config/0`) so downstream code can call `MyApp.SlackBot.push({...})` without repeating the module name at every callsite.
 - Expanded `SlackBot.TierRegistry` defaults to cover Slack's published tier list (including special cases like `chat.postMessage`) along with regression tests.
 - Redis-backed event buffer conformance harness that exercises every adapter scenario (ETS + Redis) plus multi-node Redis coverage.
 - Live Redis test helper that auto-starts `redis:7-alpine` for `mix test` and mirrors the GitHub Actions Redis service setup.
 
 ### Changed
+- README, guides, and the example bot now use the new instance helpers exclusively and document the recommended “one module per bot” pattern (plus guidance for the explicit multi-instance form).
 - Refreshed the README landing narrative to more clearly explain SlackBot’s goals and quick-start path.
 - Simplified the slash command DSL so grammar definitions live directly before `handle/3`, removing the `grammar do ... end` wrapper and updating docs, examples, and tests accordingly.
 - Event buffer adapters now share strict semantics (first-write-wins payload, TTL refresh, deterministic `pending/1`, TTL-correct `seen?/2`) with normalized telemetry events.
 - CI `test` matrix now provisions a Redis service and exports `REDIS_URL` so Redis-backed tests run in automation by default.
 - README and docs now document live Redis testing expectations, event buffer semantics, and telemetry event shapes.
+
+### Breaking
+- Removed the implicit `SlackBot.*/*` arities that defaulted to the `SlackBot` module. Call `MyBot.push/1`, `MyBot.push_async/1`, `MyBot.emit/1`, or `MyBot.config/0` (the injected helpers), or keep using the explicit forms (`SlackBot.push(bot, request)`, etc.) when supervising bots under custom names.
 ### Fixed
 - Suppressed optional Igniter and Rewrite module warnings in `mix slack_bot_ws.install` when those helper dependencies are not present.
 - Avoid blocking the users cache sync worker during Slack rate limits by scheduling retries instead of sleeping.

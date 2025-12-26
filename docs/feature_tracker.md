@@ -23,7 +23,7 @@ Establish the foundational OTP structure so the application boots with validated
 
 ## Phase 2 – Connection, API Helpers & Ack Pipeline
 **Status:** Completed  
-Deliver the WebSockex-based connection manager with retry/backoff, heartbeat monitoring, fast acknowledgements, and the base public helpers (`SlackBot.push/2`, `SlackBot.emit/2`, test transport). Introduce stubbed cache/event-buffer modules so later phases can extend functionality without reordering work.
+Deliver the WebSockex-based connection manager with retry/backoff, heartbeat monitoring, fast acknowledgements, and the base public helpers (`MyBot.push/1` / `SlackBot.push/2`, `MyBot.emit/1` / `SlackBot.emit/2`, test transport). Introduce stubbed cache/event-buffer modules so later phases can extend functionality without reordering work.
 
 ### Tasks
 - [x] Implement `SlackBot.ConnectionManager` using WebSockex + `apps.connections.open`.
@@ -31,7 +31,7 @@ Deliver the WebSockex-based connection manager with retry/backoff, heartbeat mon
 - [x] Add heartbeat monitoring + reconnect triggers.
 - [x] Wire runtime Task Supervisor for handler fan-out.
 - [x] Introduce stubbed `SlackBot.EventBuffer` and `SlackBot.Cache` modules returning noop data until Phase 3 replaces them.
-- [x] Expose `SlackBot.push/2`, `SlackBot.emit/2`, and runtime config helpers.
+- [x] Expose `MyBot.push/1` / `SlackBot.push/2`, `MyBot.emit/1` / `SlackBot.emit/2`, and runtime config helpers.
 - [x] Provide `SlackBot.TestTransport` + `SlackBot.TestHTTP` for deterministic tests.
 - [x] Unit/integration tests covering connection manager and SlackBot helpers.
 

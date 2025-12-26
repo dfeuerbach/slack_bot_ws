@@ -94,7 +94,7 @@ defmodule MyApp.SlackBot do
 
   # Respond to @mentions
   handle_event "app_mention", event, _ctx do
-    SlackBot.push({"chat.postMessage", %{
+    MyApp.SlackBot.push({"chat.postMessage", %{
       "channel" => event["channel"],
       "text" => "Hi <@#{event["user"]}>! I heard you."
     }})
@@ -158,7 +158,7 @@ defmodule MyApp.SlackBot do
 
     handle payload, _ctx do
       action = payload["parsed"][:action] || "nothing"
-      SlackBot.push({"chat.postMessage", %{
+      MyApp.SlackBot.push({"chat.postMessage", %{
         "channel" => payload["channel_id"],
         "text" => "You asked me to: #{action}"
       }})
@@ -166,7 +166,7 @@ defmodule MyApp.SlackBot do
   end
 
   handle_event "app_mention", event, _ctx do
-    SlackBot.push({"chat.postMessage", %{
+    MyApp.SlackBot.push({"chat.postMessage", %{
       "channel" => event["channel"],
       "text" => "Hi <@#{event["user"]}>!"
     }})

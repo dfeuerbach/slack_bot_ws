@@ -66,7 +66,7 @@ defmodule BasicBot do
             blocks: blocks
           }
 
-          SlackBot.push(BasicBot.SlackBot, {"chat.update", body})
+          BasicBot.SlackBot.push({"chat.update", body})
         end
 
       _ ->
@@ -158,7 +158,7 @@ defmodule BasicBot do
 
   defp respond(channel, text, _ctx) do
     body = %{channel: channel, text: text}
-    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+    BasicBot.SlackBot.push({"chat.postMessage", body})
   end
 
   defp send_blocks_demo(channel, _ctx) do
@@ -183,7 +183,7 @@ defmodule BasicBot do
       blocks: blocks
     }
 
-    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+    BasicBot.SlackBot.push({"chat.postMessage", body})
   end
 
   defp send_ephemeral_ping(payload, _ctx) do
@@ -193,17 +193,17 @@ defmodule BasicBot do
       text: "This is an ephemeral response only you can see."
     }
 
-    SlackBot.push(BasicBot.SlackBot, {"chat.postEphemeral", body})
+    BasicBot.SlackBot.push({"chat.postEphemeral", body})
   end
 
   defp run_async_demo(channel, _ctx) do
     Enum.each(1..3, fn i ->
       body = %{channel: channel, text: "Async message #{i} of 3 from BasicBot."}
-      SlackBot.push_async(BasicBot.SlackBot, {"chat.postMessage", body})
+      BasicBot.SlackBot.push_async({"chat.postMessage", body})
     end)
 
     final = %{channel: channel, text: "Async demo complete."}
-    SlackBot.push_async(BasicBot.SlackBot, {"chat.postMessage", final})
+    BasicBot.SlackBot.push_async({"chat.postMessage", final})
   end
 
   defp demo_users(channel, _ctx) do
@@ -235,7 +235,7 @@ defmodule BasicBot do
       blocks: blocks
     }
 
-    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+    BasicBot.SlackBot.push({"chat.postMessage", body})
   end
 
   defp demo_channels(channel, _ctx) do
@@ -270,7 +270,7 @@ defmodule BasicBot do
       blocks: blocks
     }
 
-    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+    BasicBot.SlackBot.push({"chat.postMessage", body})
   end
 
   defp demo_telemetry(channel, _ctx) do
@@ -283,7 +283,7 @@ defmodule BasicBot do
       blocks: blocks
     }
 
-    SlackBot.push(BasicBot.SlackBot, {"chat.postMessage", body})
+    BasicBot.SlackBot.push({"chat.postMessage", body})
   end
 
   defp telemetry_title(:telemetry_stats), do: "Telemetry snapshot (TelemetryStats live data)"

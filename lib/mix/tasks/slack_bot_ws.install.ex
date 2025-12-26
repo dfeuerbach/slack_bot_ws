@@ -86,7 +86,7 @@ defmodule Mix.Tasks.SlackBotWs.Install do
              use SlackBot, otp_app: :#{app}
 
              handle_event "app_mention", event, _ctx do
-               SlackBot.push({"chat.postMessage", %{
+               #{inspect(bot_module)}.push({"chat.postMessage", %{
                  "channel" => event["channel"],
                  "text" => "Hi <@\#{event["user"]}>!"
                }})

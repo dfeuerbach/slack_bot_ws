@@ -21,12 +21,19 @@
   - HTTP health monitor toggle: `health_check: [enabled: boolean(), interval_ms: pos_integer()]`
   - optional BlockBox toggle: `block_builder: :none | {:blockbox, opts}`
 - Runtime helpers:
-  - `SlackBot.push(bot, request)` – convenience wrappers around Slack Web API (backed by Req/Finch).
-  - `SlackBot.emit(bot, event)` – inject synthetic events (testing/scheduled jobs).
+  - `MyBot.push(request)` / `SlackBot.push(bot, request)` – route Slack Web API calls through the managed HTTP client, telemetry, and rate limiters.
+  - `MyBot.push_async(request)` / `SlackBot.push_async(bot, request)` – fire-and-forget Web API work under the runtime task supervisor.
+  - `MyBot.emit(event)` / `SlackBot.emit(bot, event)` – inject synthetic events (testing/scheduled jobs).
+  - `MyBot.config()` / `SlackBot.config(bot)` – read the immutable `%SlackBot.Config{}` for an instance.
   - `SlackBot.test_transport/1` – instrumentation-friendly fake transport for unit tests.
 
 > Configuration is immutable after boot. Update the application environment and
 > restart the `SlackBot` supervisor (or your enclosing app) to apply changes.
+
+### Multiple bots vs. multiple instances
+
+- **Preferred:** define a dedicated module per bot using `use SlackBot, otp_app: ...` so each bot gains its own `push/1`, `push_async/1`, `emit/1`, and `config/0` helpers. Supervise the modules directly (`[MyApp.CustomerBot, MyApp.IncidentBot]`) so handler code can call `MyApp.CustomerBot.push/1` without guessing which instance is running.
+- **Advanced:** when you truly need multiple runtime instances of the *same* router module (for example multi-tenant bots with dynamic names), start `SlackBot` directly with an explicit `:name` per instance and call `SlackBot.push(name, request)` / `SlackBot.push_async(name, request)`. Avoid mixing the module helpers in that setup—they assume the process is registered under the module name.
 
 ## Internal Architecture
 ```
