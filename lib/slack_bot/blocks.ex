@@ -38,7 +38,7 @@ defmodule SlackBot.Blocks do
         ]
       end)
 
-      SlackBot.push(MyApp.SlackBot, {"chat.postMessage", %{
+      MyApp.SlackBot.push({"chat.postMessage", %{
         channel: channel_id,
         text: "Welcome message",
         blocks: blocks

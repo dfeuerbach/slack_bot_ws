@@ -51,7 +51,7 @@ The example depends on the parent repo via `{:slack_bot_ws, path: "../.."}` so y
 | `/demo report platform` | Simple literal + value grammar |
 | `/demo blocks` | Block Kit message (uses BlockBox if available) |
 | `/demo ping-ephemeral` | Ephemeral message visible only to you |
-| `/demo async-demo` | Async messages via `push_async/2` |
+| `/demo async-demo` | Async messages via `push_async/1` |
 | `/demo users` | Lists cached users |
 | `/demo channels` | Lists cached channels |
 | `/demo telemetry` | Renders live metrics as a Block Kit card |

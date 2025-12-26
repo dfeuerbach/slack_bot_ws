@@ -160,46 +160,58 @@ defmodule BasicBot.TelemetryProbe do
   @impl GenServer
   def handle_info({:telemetry_event, suffix, measurements, metadata}, state) do
     stats =
-      case suffix do
-        [:api, :request] ->
-          update_api(stats(state), measurements, metadata)
-
-        [:api, :rate_limited] ->
-          put_in(stats(state).api.rate_limited, stats(state).api.rate_limited + 1)
-
-        [:tier_limiter, :decision] ->
-          update_tier(stats(state), measurements, metadata)
-
-        [:rate_limiter, :decision] ->
-          update_rate_limiter(stats(state), measurements, metadata)
-
-        [:rate_limiter, :drain] ->
-          update_in(stats(state).rate_limiter.drains, &(&1 + Map.get(measurements, :drained, 0)))
-
-        [:cache, :sync] ->
-          update_cache_sync(stats(state), measurements, metadata)
-
-        [:connection, :state] ->
-          update_connection_state(stats(state), metadata)
-
-        [:connection, :rate_limited] ->
-          update_in(stats(state).connection.rate_limited, &(&1 + 1))
-
-        [:healthcheck, :ping] ->
-          update_health(stats(state), metadata)
-
-        [:healthcheck, :disabled] ->
-          put_in(stats(state).health.disabled, true)
-
-        [:ack, :http] ->
-          update_ack(stats(state), metadata)
-
-        _ ->
-          stats(state)
-      end
+      state
+      |> stats()
+      |> apply_telemetry_update(suffix, measurements, metadata)
 
     {:noreply, %{state | stats: stats}}
   end
+
+  defp apply_telemetry_update(stats, [:api, :request], measurements, metadata) do
+    update_api(stats, measurements, metadata)
+  end
+
+  defp apply_telemetry_update(stats, [:api, :rate_limited], _measurements, _metadata) do
+    put_in(stats.api.rate_limited, stats.api.rate_limited + 1)
+  end
+
+  defp apply_telemetry_update(stats, [:tier_limiter, :decision], measurements, metadata) do
+    update_tier(stats, measurements, metadata)
+  end
+
+  defp apply_telemetry_update(stats, [:rate_limiter, :decision], measurements, metadata) do
+    update_rate_limiter(stats, measurements, metadata)
+  end
+
+  defp apply_telemetry_update(stats, [:rate_limiter, :drain], measurements, _metadata) do
+    update_in(stats.rate_limiter.drains, &(&1 + Map.get(measurements, :drained, 0)))
+  end
+
+  defp apply_telemetry_update(stats, [:cache, :sync], measurements, metadata) do
+    update_cache_sync(stats, measurements, metadata)
+  end
+
+  defp apply_telemetry_update(stats, [:connection, :state], _measurements, metadata) do
+    update_connection_state(stats, metadata)
+  end
+
+  defp apply_telemetry_update(stats, [:connection, :rate_limited], _measurements, _metadata) do
+    update_in(stats.connection.rate_limited, &(&1 + 1))
+  end
+
+  defp apply_telemetry_update(stats, [:healthcheck, :ping], _measurements, metadata) do
+    update_health(stats, metadata)
+  end
+
+  defp apply_telemetry_update(stats, [:healthcheck, :disabled], _measurements, _metadata) do
+    put_in(stats.health.disabled, true)
+  end
+
+  defp apply_telemetry_update(stats, [:ack, :http], _measurements, metadata) do
+    update_ack(stats, metadata)
+  end
+
+  defp apply_telemetry_update(stats, _suffix, _measurements, _metadata), do: stats
 
   @doc false
   @spec handle_event([atom()], map(), map(), %{pid: pid(), prefix_len: non_neg_integer()}) :: :ok

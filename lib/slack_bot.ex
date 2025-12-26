@@ -16,7 +16,7 @@ defmodule SlackBot do
         use SlackBot, otp_app: :my_app
 
         handle_event "message", event, _ctx do
-          SlackBot.push({"chat.postMessage", %{
+          MyApp.SlackBot.push({"chat.postMessage", %{
             "channel" => event["channel"],
             "text" => "Hello from MyApp!"
           }})
@@ -71,10 +71,11 @@ defmodule SlackBot do
 
   ### Web API Calls
 
-  - `push/2` - Synchronous API call (waits for response)
-  - `push_async/2` - Fire-and-forget async call
+  - `MyApp.SlackBot.push/1` - Synchronous API call (waits for response) for bot modules started via the `otp_app` pattern.
+  - `SlackBot.push/2` - Explicit variant when supervising bots under custom names or passing `%SlackBot.Config{}` directly.
+  - `MyApp.SlackBot.push_async/1` / `SlackBot.push_async/2` - Fire-and-forget async calls routed through the runtime task supervisor.
 
-  Both route through rate limiters and Telemetry automatically.
+  All variants route through rate limiters and Telemetry automatically.
 
   ### Cache Queries
 
@@ -83,23 +84,44 @@ defmodule SlackBot do
 
   ### Event Injection
 
-  - `emit/2` - Inject synthetic events into the handler pipeline
+  - `MyApp.SlackBot.emit/1` / `SlackBot.emit/2` - Inject synthetic events into the handler pipeline
 
   ### Configuration
 
-  - `config/1` - Read the immutable `%SlackBot.Config{}` struct
+  - `MyApp.SlackBot.config/0` / `SlackBot.config/1` - Read the immutable `%SlackBot.Config{}` struct
 
   ## Multiple Bot Instances
 
-  Run multiple bots in the same BEAM node by giving each a unique name:
+  The ergonomic approach is **one module per bot** using the `otp_app` pattern:
+
+      defmodule MyApp.BotOne do
+        use SlackBot, otp_app: :my_app
+      end
+
+      defmodule MyApp.BotTwo do
+        use SlackBot, otp_app: :my_app
+      end
 
       children = [
-        {SlackBot, name: BotOne, module: MyApp.BotOne, ...},
-        {SlackBot, name: BotTwo, module: MyApp.BotTwo, ...}
+        MyApp.BotOne,
+        MyApp.BotTwo
       ]
 
-  Derived processes (config server, connection manager, task supervisor) inherit
-  names automatically: `BotOne.ConfigServer`, `BotOne.ConnectionManager`, etc.
+  Each module gets its own `push/1`, `push_async/1`, `emit/1`, and `config/0`
+  helpers so your handlers can call `MyApp.BotOne.push/1` without guessing which
+  instance is running.
+
+  Need multiple runtime copies of the **same** router module (for multi-tenant
+  bots, for example)? Start `SlackBot` directly with a unique `:name` per instance:
+
+      children = [
+        {SlackBot, name: :team_alpha_bot, module: MyApp.DynamicRouter, ...},
+        {SlackBot, name: :team_beta_bot, module: MyApp.DynamicRouter, ...}
+      ]
+
+  In that setup, call the explicit APIs (`SlackBot.push(:team_alpha_bot, request)`,
+  `SlackBot.emit(:team_beta_bot, event)`, etc.) and avoid the module helpers so
+  there is no ambiguity about which instance is targeted.
 
   ## See Also
 
@@ -167,7 +189,7 @@ defmodule SlackBot do
   Reads the immutable `%SlackBot.Config{}` from the config server registered under `server`.
   """
   @spec config(GenServer.server()) :: Config.t()
-  def config(server \\ __MODULE__) do
+  def config(server) do
     server
     |> resolve_config_server()
     |> ConfigServer.config()
@@ -184,7 +206,9 @@ defmodule SlackBot do
 
   ## Arguments
 
-  - `server` - Bot instance name (defaults to `SlackBot`)
+  - `server_or_config` - Bot instance name (atom, pid, or `{:via, ...}`) or a
+    `%SlackBot.Config{}` reference. Most applications should call the injected
+    module helper (`MyApp.SlackBot.push/1`) instead of invoking this function directly.
   - `{method, body}` - Tuple of API method name and request parameters
 
   ## Returns
@@ -196,7 +220,7 @@ defmodule SlackBot do
 
   ### Post a message
 
-      iex> SlackBot.push(MyApp.SlackBot, {"chat.postMessage", %{
+      iex> MyApp.SlackBot.push({"chat.postMessage", %{
       ...>   "channel" => "C123456",
       ...>   "text" => "Hello from SlackBot!",
       ...>   "blocks" => [...]
@@ -210,7 +234,7 @@ defmodule SlackBot do
 
   ### Upload a file
 
-      iex> SlackBot.push(MyApp.SlackBot, {"files.upload", %{
+      iex> MyApp.SlackBot.push({"files.upload", %{
       ...>   "channels" => "C123456",
       ...>   "content" => "log data here",
       ...>   "filename" => "debug.log",
@@ -220,7 +244,7 @@ defmodule SlackBot do
 
   ### Update a message
 
-      iex> SlackBot.push(MyApp.SlackBot, {"chat.update", %{
+      iex> MyApp.SlackBot.push({"chat.update", %{
       ...>   "channel" => "C123456",
       ...>   "ts" => "1234567890.123456",
       ...>   "text" => "Updated text"
@@ -229,7 +253,7 @@ defmodule SlackBot do
 
   ## Error Handling
 
-      case SlackBot.push(MyApp.SlackBot, {"chat.postMessage", body}) do
+      case MyApp.SlackBot.push({"chat.postMessage", body}) do
         {:ok, %{"ok" => true} = response} ->
           Logger.info("Message posted: \#{response["ts"]}")
 
@@ -251,18 +275,20 @@ defmodule SlackBot do
   ## Rate Limiting
 
   SlackBot automatically queues requests when approaching rate limits. Your call
-  may block briefly if the limiter needs to wait. Use `push_async/2` for
-  fire-and-forget calls that shouldn't block your handler.
+  may block briefly if the limiter needs to wait. Use the module helper
+  `MyApp.SlackBot.push_async/1` (or `SlackBot.push_async/2` when targeting a
+  dynamic instance) for fire-and-forget calls that shouldn't block your handler.
 
   ## See Also
 
-  - `push_async/2` - Non-blocking variant
+  - `MyApp.SlackBot.push_async/1` - Non-blocking variant for the otp_app helper
+  - `push_async/2` - Non-blocking variant when you need to target a specific instance name
   - [Slack Web API Reference](https://api.slack.com/methods)
   - [Rate Limiting Guide](https://hexdocs.pm/slack_bot_ws/rate_limiting.html)
   """
   @spec push(Config.t() | GenServer.server(), {String.t(), map()}) ::
           {:ok, map()} | {:error, term()}
-  def push(server \\ __MODULE__, {method, body}) when is_binary(method) and is_map(body) do
+  def push(server, {method, body}) when is_binary(method) and is_map(body) do
     config =
       case server do
         %Config{} = config -> config
@@ -301,7 +327,9 @@ defmodule SlackBot do
   @doc """
   Sends a Web API request asynchronously without blocking the caller.
 
-  Use this when you want fire-and-forget behavior—your handler continues
+  Prefer the injected module helper (`MyApp.SlackBot.push_async/1`) unless you
+  need to target a dynamically named instance. Use this when you want
+  fire-and-forget behavior—your handler continues
   immediately while the API call happens in a supervised task.
 
   ## When to Use push_async
@@ -321,7 +349,7 @@ defmodule SlackBot do
 
       def notify_team(user_ids, message) do
         Enum.each(user_ids, fn user_id ->
-          SlackBot.push_async(MyApp.SlackBot, {"chat.postMessage", %{
+          MyApp.SlackBot.push_async({"chat.postMessage", %{
             "channel" => user_id,
             "text" => message
           }})
@@ -333,7 +361,7 @@ defmodule SlackBot do
   ### Fire and forget
 
       # Don't care about the result
-      SlackBot.push_async(MyApp.SlackBot, {"reactions.add", %{
+      MyApp.SlackBot.push_async({"reactions.add", %{
         "channel" => channel,
         "timestamp" => ts,
         "name" => "white_check_mark"
@@ -341,7 +369,7 @@ defmodule SlackBot do
 
   ### Await if needed
 
-      task = SlackBot.push_async(MyApp.SlackBot, {"chat.postMessage", body})
+      task = MyApp.SlackBot.push_async({"chat.postMessage", body})
       # ... do other work ...
       result = Task.await(task, 5_000)
 
@@ -352,11 +380,12 @@ defmodule SlackBot do
 
   ## See Also
 
-  - `push/2` - Synchronous variant that waits for response
+  - `MyApp.SlackBot.push/1` - Synchronous variant that waits for response
+  - `push/2` - Explicit synchronous variant when you need to target a dynamic instance
   - `Task.await/2` - If you need to wait for the result later
   """
   @spec push_async(GenServer.server(), {String.t(), map()}) :: Task.t()
-  def push_async(server \\ __MODULE__, request) do
+  def push_async(server, request) do
     server
     |> resolve_task_supervisor()
     |> Task.Supervisor.async(fn -> push(server, request) end)
@@ -365,8 +394,10 @@ defmodule SlackBot do
   @doc """
   Injects a synthetic event into your handler pipeline.
 
-  This lets you programmatically trigger handlers as if Slack sent the event,
-  useful for testing, scheduled tasks, or cross-bot communication.
+  Prefer the injected module helper (`MyApp.SlackBot.emit/1`) unless you need to
+  target a dynamically named instance. This lets you programmatically trigger
+  handlers as if Slack sent the event, useful for testing, scheduled tasks, or
+  cross-bot communication.
 
   ## Use Cases
 
@@ -377,6 +408,7 @@ defmodule SlackBot do
 
   ## Arguments
 
+  - `server_or_config` - Bot instance name (atom/pid/via) or `%SlackBot.Config{}`.
   - `type` - Event type matching your `handle_event` declarations
   - `payload` - Event payload map (structure depends on event type)
 
@@ -384,7 +416,7 @@ defmodule SlackBot do
 
   ### Trigger a message handler
 
-      SlackBot.emit(MyApp.SlackBot, {"message", %{
+      MyApp.SlackBot.emit({"message", %{
         "type" => "message",
         "channel" => "C123456",
         "user" => "U123456",
@@ -395,7 +427,7 @@ defmodule SlackBot do
   ### Scheduled reminder
 
       def send_daily_reminder do
-        SlackBot.emit(MyApp.SlackBot, {"daily_reminder", %{
+        MyApp.SlackBot.emit({"daily_reminder", %{
           "time" => DateTime.utc_now(),
           "channels" => ["C123", "C456"]
         }})
@@ -404,7 +436,7 @@ defmodule SlackBot do
       # In your router:
       handle_event "daily_reminder", payload, _ctx do
         Enum.each(payload["channels"], fn channel ->
-          SlackBot.push({"chat.postMessage", %{
+          MyApp.SlackBot.push({"chat.postMessage", %{
             "channel" => channel,
             "text" => "Daily standup in 10 minutes!"
           }})
@@ -415,7 +447,7 @@ defmodule SlackBot do
 
       # In your test
       test "processes mentions correctly" do
-        SlackBot.emit(MyBot, {"app_mention", %{
+        MyBot.emit({"app_mention", %{
           "channel" => "C123",
           "user" => "U123",
           "text" => "<@BOTID> help"
@@ -435,10 +467,18 @@ defmodule SlackBot do
   - `SlackBot.Diagnostics.replay/2` - Replay captured events
   - Your `handle_event` declarations in your bot module
   """
-  @spec emit(GenServer.server(), {String.t(), map()}) :: :ok
-  def emit(server \\ __MODULE__, {type, payload}) when is_binary(type) and is_map(payload) do
-    config = config(server)
+  @spec emit(Config.t() | GenServer.server(), {String.t(), map()}) :: :ok
+  def emit(%Config{} = config, {type, payload}) when is_binary(type) and is_map(payload) do
+    server = config.instance_name || config.module
+    do_emit(config, server, type, payload)
+  end
 
+  def emit(server, {type, payload}) when is_binary(type) and is_map(payload) do
+    config = config(server)
+    do_emit(config, server, type, payload)
+  end
+
+  defp do_emit(config, server, type, payload) do
     Diagnostics.record(config, :outbound, %{
       type: type,
       payload: payload,
@@ -512,7 +552,7 @@ defmodule SlackBot do
       def send_dm(email, message) do
         case SlackBot.find_user(MyBot, {:email, email}) do
           %{"id" => user_id} ->
-            SlackBot.push(MyBot, {"chat.postMessage", %{
+            MyBot.push({"chat.postMessage", %{
               "channel" => user_id,
               "text" => message
             }})
@@ -601,7 +641,7 @@ defmodule SlackBot do
       def post_to_channel(channel_name, message) do
         case SlackBot.find_channel(MyBot, {:name, channel_name}) do
           %{"id" => channel_id} ->
-            SlackBot.push(MyBot, {"chat.postMessage", %{
+            MyBot.push({"chat.postMessage", %{
               "channel" => channel_id,
               "text" => message
             }})
@@ -688,6 +728,42 @@ defmodule SlackBot do
 
       if otp_app do
         @slackbot_otp_app otp_app
+
+        @doc """
+        Sends a Slack Web API request through this bot instance.
+
+        Equivalent to calling `SlackBot.push(__MODULE__, request)`.
+        """
+        @spec push({String.t(), map()}) :: {:ok, map()} | {:error, term()}
+        def push(request) when is_tuple(request) do
+          SlackBot.push(__MODULE__, request)
+        end
+
+        @doc """
+        Sends a Slack Web API request asynchronously using this bot instance.
+
+        Delegates to `SlackBot.push_async(__MODULE__, request)`.
+        """
+        @spec push_async({String.t(), map()}) :: Task.t()
+        def push_async(request) when is_tuple(request) do
+          SlackBot.push_async(__MODULE__, request)
+        end
+
+        @doc """
+        Emits a synthetic event through this bot's handler pipeline.
+        """
+        @spec emit({String.t(), map()}) :: :ok
+        def emit(event) when is_tuple(event) do
+          SlackBot.emit(__MODULE__, event)
+        end
+
+        @doc """
+        Returns this bot's immutable `%SlackBot.Config{}`.
+        """
+        @spec config() :: SlackBot.Config.t()
+        def config do
+          SlackBot.config(__MODULE__)
+        end
 
         @doc false
         @spec child_spec(keyword()) :: Supervisor.child_spec()
