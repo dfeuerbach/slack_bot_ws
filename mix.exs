@@ -29,6 +29,7 @@ defmodule SlackBot.MixProject do
           "CHANGELOG.md",
           "LICENSE"
         ],
+        assets: %{"docs/images/slackbot_logo_sm.png" => "images/slackbot_logo_sm.png"},
         groups_for_extras: [
           Guides: [
             "docs/getting_started.md",
@@ -38,7 +39,6 @@ defmodule SlackBot.MixProject do
             "docs/telemetry_dashboard.md"
           ]
         ],
-        assets: %{"docs/images" => "docs/images"},
         filter_modules: fn module, _meta ->
           module
           |> Atom.to_string()
