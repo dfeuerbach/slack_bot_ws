@@ -440,60 +440,58 @@ defmodule BasicBot do
   end
 
   defp build_user_blocks(users) when is_list(users) do
-    header = [
+    user_blocks_header() ++ Enum.flat_map(users, &user_blocks/1)
+  end
+
+  defp user_blocks(%{"id" => id} = user) do
+    profile = Map.get(user, "profile", %{})
+    handle = Map.get(user, "name")
+    display = Map.get(profile, "display_name")
+
+    [
+      SlackBot.Blocks.section("*<@#{id}>*  #{formatted_name(display, handle, id)}")
+      | user_secondary_blocks(profile, user)
+    ]
+  end
+
+  defp formatted_name(nil, nil, id), do: id
+  defp formatted_name(nil, handle, _id), do: handle
+  defp formatted_name(display, nil, _id), do: display
+  defp formatted_name(display, handle, _id), do: "#{display} (#{handle})"
+
+  defp user_secondary_blocks(profile, user) do
+    profile
+    |> user_metadata(user)
+    |> maybe_secondary_context()
+  end
+
+  defp user_metadata(profile, user) do
+    [
+      Map.get(profile, "email") && "*Email* #{Map.get(profile, "email")}",
+      Map.get(profile, "title") && "*Title* #{Map.get(profile, "title")}",
+      Map.get(user, "presence") && "*Presence* #{Map.get(user, "presence")}"
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp maybe_secondary_context([]), do: []
+
+  defp maybe_secondary_context(items) do
+    [
+      SlackBot.Blocks.context([
+        Enum.join(items, "  •  ")
+      ])
+    ]
+  end
+
+  defp user_blocks_header do
+    [
       SlackBot.Blocks.section("*Cached users*"),
       SlackBot.Blocks.context([
         "Sample of up to 5 users from the metadata cache."
       ]),
       SlackBot.Blocks.divider()
     ]
-
-    entries =
-      users
-      |> Enum.flat_map(fn %{"id" => id} = user ->
-        profile = Map.get(user, "profile", %{})
-
-        handle = Map.get(user, "name")
-        display = Map.get(profile, "display_name")
-        email = Map.get(profile, "email")
-        title = Map.get(profile, "title")
-        presence = Map.get(user, "presence")
-
-        name_part =
-          cond do
-            display && handle -> "#{display} (#{handle})"
-            display -> display
-            handle -> handle
-            true -> id
-          end
-
-        primary = SlackBot.Blocks.section("*<@#{id}>*  #{name_part}")
-
-        secondary_items =
-          [
-            email && "*Email* #{email}",
-            title && "*Title* #{title}",
-            presence && "*Presence* #{presence}"
-          ]
-          |> Enum.reject(&is_nil/1)
-
-        secondary =
-          case secondary_items do
-            [] ->
-              []
-
-            items ->
-              [
-                SlackBot.Blocks.context([
-                  Enum.join(items, "  •  ")
-                ])
-              ]
-          end
-
-        [primary | secondary]
-      end)
-
-    header ++ entries
   end
 
   defp build_channel_blocks(channels, total_count) when is_list(channels) do
@@ -850,15 +848,11 @@ defmodule BasicBot do
 
   defp format_ms(nil), do: "n/a"
 
-  defp format_ms(value) when is_number(value) do
-    cond do
-      value >= 1_000 ->
-        "#{Float.round(value / 1_000, 2)} s"
-
-      true ->
-        "#{Float.round(value, 2)} ms"
-    end
+  defp format_ms(value) when is_number(value) and value >= 1_000 do
+    "#{Float.round(value / 1_000, 2)} s"
   end
+
+  defp format_ms(value) when is_number(value), do: "#{Float.round(value, 2)} ms"
 
   defp format_ms(_), do: "n/a"
 
