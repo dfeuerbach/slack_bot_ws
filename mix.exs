@@ -9,7 +9,7 @@ defmodule SlackBot.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/dfeuerbach/slack_bot_ws",
-      source_ref: "0.1.0-rc.2",
+      source_ref: "v0.1.0-rc.2",
       description: description(),
       package: package(),
       deps: deps(),
