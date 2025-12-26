@@ -4,17 +4,18 @@ defmodule SlackBot.MixProject do
   def project do
     [
       app: :slack_bot_ws,
-      version: "0.1.0-rc.1",
+      version: "0.1.0-rc.2",
       elixir: "~> 1.17",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/dfeuerbach/slack_bot_ws",
+      source_ref: "0.1.0-rc.2",
       description: description(),
       package: package(),
       deps: deps(),
       docs: [
         main: "readme",
-        source_ref: "master",
+        source_ref: "v0.1.0-rc.2",
         source_url: "https://github.com/dfeuerbach/slack_bot_ws",
         extras: [
           "README.md",
